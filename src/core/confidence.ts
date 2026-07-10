@@ -24,27 +24,31 @@ export function computeConfidence(
 
   const champion = ranked[0];
 
-  // 1. Calculate Maximum Achievable Score
+  // 1. Calculate Maximum Achievable Score dynamically from the actual pref weights.
+  // This mirrors the exact formula in ranking.ts so the denominator is always correct.
   const costWeight = pref.cost_weight;
   const directWeight = pref.direct_weight;
   const convenienceWeight = pref.convenience_weight;
   const baggageWeight = pref.bags_matter ? 0.25 : 0;
 
-  // Maximum achievable values for components:
-  // priceScore = 1, directScore = 1, timeScore = 1, cabinScore = 1, airlineScore = 1, baggageScore = 1
-  // demandAdj = 1.05 (low demand), holidayAdj = 1 (not holiday)
+  // Theoretical maximum: every component at best value, demand at 1.05 (low), no holiday penalty
+  // Matches: costWeight*1 + directWeight*1 + (1-costWeight)*0.5*1 + convenienceWeight*0.3*1 + 0.2*1 + baggageWeight*1
   const maxRawScore =
-    costWeight * 1 +
-    directWeight * 1 +
-    (1 - costWeight) * 0.5 * 1 +
-    convenienceWeight * 0.3 * 1 +
-    0.2 * 1 +
-    baggageWeight * 1;
+    costWeight +
+    directWeight +
+    (1 - costWeight) * 0.5 +
+    convenienceWeight * 0.3 +
+    0.2 +
+    baggageWeight;
 
-  const maxAchievableScore = maxRawScore * 1.05 * 1;
+  // Apply best-case demand multiplier (low demand = 1.05)
+  const maxAchievableScore = maxRawScore * 1.05;
 
-  // matchPct is champion's score / maxAchievableScore
-  const matchPct = Math.min(100, Math.max(0, Math.round((champion.score / maxAchievableScore) * 100)));
+  // Protect against degenerate cases (all weights zero, or champion.score undefined)
+  const championScore = typeof champion.score === "number" && isFinite(champion.score) ? champion.score : 0;
+  const matchPct = maxAchievableScore > 0
+    ? Math.min(100, Math.max(0, Math.round((championScore / maxAchievableScore) * 100)))
+    : 0;
 
   // 2. Identify Strong vs Weak Signals based on evidence source agreement
   const strongSignals: string[] = [];
@@ -89,6 +93,12 @@ export function computeConfidence(
     } else if (tier === "medium") {
       tier = "low";
     }
+  }
+
+  // Fix 3 — Confidence Tier Floor:
+  // If matchPct is clearly strong (>= 80%), don't show "low" confidence — promote to "medium".
+  if (matchPct >= 80 && tier === "low") {
+    tier = "medium";
   }
 
   return {

@@ -23,14 +23,17 @@ function computeConfidence(ranked, pref) {
     const directWeight = pref.direct_weight;
     const convenienceWeight = pref.convenience_weight;
     const baggageWeight = pref.bags_matter ? 0.25 : 0;
-    const maxRawScore = costWeight * 1 +
-        directWeight * 1 +
-        (1 - costWeight) * 0.5 * 1 +
-        convenienceWeight * 0.3 * 1 +
-        0.2 * 1 +
-        baggageWeight * 1;
-    const maxAchievableScore = maxRawScore * 1.05 * 1;
-    const matchPct = Math.min(100, Math.max(0, Math.round((champion.score / maxAchievableScore) * 100)));
+    const maxRawScore = costWeight +
+        directWeight +
+        (1 - costWeight) * 0.5 +
+        convenienceWeight * 0.3 +
+        0.2 +
+        baggageWeight;
+    const maxAchievableScore = maxRawScore * 1.05;
+    const championScore = typeof champion.score === "number" && isFinite(champion.score) ? champion.score : 0;
+    const matchPct = maxAchievableScore > 0
+        ? Math.min(100, Math.max(0, Math.round((championScore / maxAchievableScore) * 100)))
+        : 0;
     const strongSignals = [];
     const weakSignals = [];
     const dimensions = ["direct", "cost", "convenience", "redeye", "airline", "cabin"];
@@ -66,6 +69,9 @@ function computeConfidence(ranked, pref) {
         else if (tier === "medium") {
             tier = "low";
         }
+    }
+    if (matchPct >= 80 && tier === "low") {
+        tier = "medium";
     }
     return {
         matchPct,

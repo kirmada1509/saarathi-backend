@@ -4,6 +4,7 @@ export declare function filterAndRank(flights: FlightRow[], pref: InferredPrefer
     destination?: string;
     date?: string;
     perturbations?: Perturbation[];
+    preferredDays?: string[];
 }): {
     ranked: ScoredFlight[];
     trace: FilterTrace;

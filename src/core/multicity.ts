@@ -17,18 +17,20 @@ function permute<T>(arr: T[]): T[][] {
   return result;
 }
 
-// Check if leg2 departs at least 12 hours (720 minutes) after leg1 arrives
+// Check if leg2 departs at least 1 hour (60 minutes) after leg1 arrives.
+// For multi-city tourism routes, legs are typically on different days;
+// the 60-minute floor prevents same-flight double-counting while remaining lenient.
 function satisfiesTemporalSanity(leg1: FlightRow, leg2: FlightRow): boolean {
   const arrival = new Date(leg1.arrival_utc).getTime();
   const departure = new Date(leg2.departure_utc).getTime();
   const diffMinutes = (departure - arrival) / (1000 * 60);
-  return diffMinutes >= 720; // 12 hours turnaround
+  return diffMinutes >= 60; // at least 1 hour between arrival and next departure
 }
 
 export function optimizeRoute(
   cities: string[],
   pref: InferredPreference
-): { itinerary: MultiCityItinerary; alternatives: Alternative[]; counterfactualLabel: string } | null {
+): { itinerary: MultiCityItinerary; alternatives: Alternative[]; counterfactualLabel: string; scoreGap: number } | null {
   const store = getStore();
   const home = pref.home_airport;
 
@@ -202,5 +204,6 @@ export function optimizeRoute(
     itinerary: champion.itinerary,
     alternatives,
     counterfactualLabel,
+    scoreGap: champion.scoreSum - (challenger?.scoreSum ?? champion.scoreSum - 0.2),
   };
 }

@@ -73,9 +73,9 @@ function filterAndRank(flights, pref, opts = {}) {
             remaining: current.length,
         });
     }
-    const targetDate = opts.date ?? (flights.length > 0 ? flights[0].departure_utc.substring(0, 10) : undefined);
-    const flexDays = pref.date_flexibility_days_override ?? pref.date_flexibility_days ?? 0;
+    const targetDate = opts.date ?? null;
     if (targetDate && current.length > 0) {
+        const flexDays = pref.date_flexibility_days_override ?? pref.date_flexibility_days ?? 14;
         const beforeDate = current.length;
         current = current.filter((f) => {
             const fDate = f.departure_utc.substring(0, 10);
@@ -83,7 +83,7 @@ function filterAndRank(flights, pref, opts = {}) {
             return diff <= flexDays;
         });
         trace.steps.push({
-            constraint: `Date flexibility ≤ ${flexDays} days`,
+            constraint: `Date flexibility ≤ ${flexDays} days from ${targetDate}`,
             removed: beforeDate - current.length,
             remaining: current.length,
         });
@@ -108,6 +108,12 @@ function filterAndRank(flights, pref, opts = {}) {
         const convenienceWeight = pref.convenience_weight;
         const baggageScore = f.baggage_included ? 1 : 0.2;
         const baggageWeight = pref.bags_matter ? 0.25 : 0;
+        const flightDayName = getDayName(f.departure_utc).toLowerCase();
+        const dayBonus = opts.preferredDays && opts.preferredDays.length > 0
+            ? opts.preferredDays.some((d) => d.toLowerCase() === flightDayName)
+                ? 0.15
+                : 0
+            : 0;
         const score = (costWeight * priceScore +
             directWeight * directScore +
             (1 - costWeight) * 0.5 * timeScore +
@@ -115,7 +121,8 @@ function filterAndRank(flights, pref, opts = {}) {
             0.2 * airlineScore +
             baggageWeight * baggageScore) *
             demandAdj *
-            holidayAdj;
+            holidayAdj +
+            dayBonus;
         const breakdown = {
             price: Math.round(costWeight * priceScore * demandAdj * holidayAdj * 1000) / 1000,
             direct: Math.round(directWeight * directScore * demandAdj * holidayAdj * 1000) / 1000,
@@ -123,6 +130,7 @@ function filterAndRank(flights, pref, opts = {}) {
             cabin: Math.round(convenienceWeight * 0.3 * cabinScore * demandAdj * holidayAdj * 1000) / 1000,
             airline: Math.round(0.2 * airlineScore * demandAdj * holidayAdj * 1000) / 1000,
             baggage: Math.round(baggageWeight * baggageScore * demandAdj * holidayAdj * 1000) / 1000,
+            dayBonus: Math.round(dayBonus * 1000) / 1000,
         };
         return {
             ...f,

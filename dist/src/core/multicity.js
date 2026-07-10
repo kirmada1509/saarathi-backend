@@ -21,7 +21,7 @@ function satisfiesTemporalSanity(leg1, leg2) {
     const arrival = new Date(leg1.arrival_utc).getTime();
     const departure = new Date(leg2.departure_utc).getTime();
     const diffMinutes = (departure - arrival) / (1000 * 60);
-    return diffMinutes >= 720;
+    return diffMinutes >= 60;
 }
 function optimizeRoute(cities, pref) {
     const store = (0, data_1.getStore)();
@@ -143,6 +143,7 @@ function optimizeRoute(cities, pref) {
         itinerary: champion.itinerary,
         alternatives,
         counterfactualLabel,
+        scoreGap: champion.scoreSum - (challenger?.scoreSum ?? champion.scoreSum - 0.2),
     };
 }
 //# sourceMappingURL=multicity.js.map
