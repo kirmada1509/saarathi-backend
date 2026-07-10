@@ -1,0 +1,62 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                    Int     @id @default(autoincrement())
+  user_id               String  @unique
+  age                   Int
+  home_airport          String
+  home_city             String
+  frequent_flyer        String
+  preferred_airlines    String
+  preferred_cabin       String
+  price_sensitivity     String
+  direct_preference     String
+  max_layover_minutes   Int
+  date_flexibility_days Int
+  multi_city_tendency   String
+  trip_purpose          String
+  preferred_departure   String
+  baggage_preference    String
+  seasonal_pattern      String
+  raw_history           String
+}
+
+model Flight {
+  id                  Int     @id @default(autoincrement())
+  flight_id           String  @unique
+  airline_code        String
+  airline_name        String
+  alliance            String
+  flight_numbers      String
+  origin              String
+  origin_city         String
+  destination         String
+  destination_city    String
+  departure_utc       String
+  arrival_utc         String
+  duration_minutes    Int
+  stops               Int
+  layover_airports    String
+  layover_minutes     Int
+  cabin_class         String
+  price               Float
+  currency            String
+  seats_available     Int
+  aircraft_type       String
+  on_time_performance Float
+  baggage_included    Boolean
+  refundable          Boolean
+  demand_level        String
+  season              String
+  is_holiday_season   Boolean
+}
