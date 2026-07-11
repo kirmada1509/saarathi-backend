@@ -1,6 +1,13 @@
-import { FlightRow, InferredPreference, ScoredFlight, MultiCityItinerary, MultiCityLeg, Alternative } from "./types";
-import { filterAndRank } from "./ranking";
-import { getStore } from "./data";
+import {
+  FlightRow,
+  InferredPreference,
+  ScoredFlight,
+  MultiCityItinerary,
+  MultiCityLeg,
+  Alternative,
+} from './types';
+import { filterAndRank } from './ranking';
+import { getStore } from './data';
 
 // Generate all permutations of an array
 function permute<T>(arr: T[]): T[][] {
@@ -29,60 +36,106 @@ function satisfiesTemporalSanity(leg1: FlightRow, leg2: FlightRow): boolean {
 
 export function optimizeRoute(
   cities: string[],
-  pref: InferredPreference
-): { itinerary: MultiCityItinerary; alternatives: Alternative[]; counterfactualLabel: string; scoreGap: number } | null {
+  pref: InferredPreference,
+): {
+  itinerary: MultiCityItinerary;
+  alternatives: Alternative[];
+  counterfactualLabel: string;
+  scoreGap: number;
+} | null {
   const store = getStore();
   const home = pref.home_airport;
 
   const permutations = permute(cities);
-  const validItineraries: { itinerary: MultiCityItinerary; scoreSum: number; legs: MultiCityLeg[] }[] = [];
+  const validItineraries: {
+    itinerary: MultiCityItinerary;
+    scoreSum: number;
+    legs: MultiCityLeg[];
+  }[] = [];
 
   for (const perm of permutations) {
     const route = [home, ...perm, home];
-    const legs: MultiCityLeg[] = [];
-    let isValid = true;
-    let scoreSum = 0;
 
+    // Precompute ranked flights and top scores for each leg in this route
+    const rankedLegs: ScoredFlight[][] = [];
     for (let i = 0; i < route.length - 1; i++) {
       const from = route[i];
       const to = route[i + 1];
       const flights = store.flightsByRoute.get(`${from}-${to}`) ?? [];
+      const { ranked } = filterAndRank(flights, pref, {
+        origin: from,
+        destination: to,
+      });
+      rankedLegs.push(ranked);
+    }
 
-      // Rank flights for this leg using user preferences
-      const { ranked } = filterAndRank(flights, pref, { origin: from, destination: to });
+    // Precompute max possible remaining score for pruning
+    const maxRemainingScore = new Array(route.length - 1).fill(0);
+    let sum = 0;
+    for (let i = route.length - 2; i >= 0; i--) {
+      maxRemainingScore[i] = sum;
+      if (rankedLegs[i + 1] && rankedLegs[i + 1].length > 0) {
+        sum += rankedLegs[i + 1][0].score;
+      }
+    }
 
-      // Find the best flight that satisfies temporal constraints compared to the previous leg
-      let selectedFlight: ScoredFlight | null = null;
+    let bestPathResult: { legs: MultiCityLeg[]; scoreSum: number } | null =
+      null;
+
+    function search(
+      legIdx: number,
+      prevFlight: ScoredFlight | null,
+    ): { legs: MultiCityLeg[]; scoreSum: number } | null {
+      if (legIdx === route.length - 1) {
+        return { legs: [], scoreSum: 0 };
+      }
+
+      const from = route[legIdx];
+      const to = route[legIdx + 1];
+      const ranked = rankedLegs[legIdx];
+
+      let bestSubResult: { legs: MultiCityLeg[]; scoreSum: number } | null =
+        null;
+
       for (const f of ranked) {
-        if (i === 0) {
-          selectedFlight = f;
+        if (prevFlight && !satisfiesTemporalSanity(prevFlight, f)) {
+          continue;
+        }
+
+        if (
+          bestPathResult &&
+          f.score + maxRemainingScore[legIdx] <= bestPathResult.scoreSum
+        ) {
           break;
-        } else {
-          const prevFlight = legs[i - 1].flight;
-          if (satisfiesTemporalSanity(prevFlight, f)) {
-            selectedFlight = f;
-            break;
+        }
+
+        const sub = search(legIdx + 1, f);
+        if (sub) {
+          const currentScoreSum = f.score + sub.scoreSum;
+          if (!bestSubResult || currentScoreSum > bestSubResult.scoreSum) {
+            bestSubResult = {
+              legs: [{ from, to, flight: f }, ...sub.legs],
+              scoreSum: currentScoreSum,
+            };
+            if (legIdx === 0) {
+              bestPathResult = bestSubResult;
+            }
           }
         }
       }
 
-      if (!selectedFlight) {
-        isValid = false;
-        break;
-      }
-
-      legs.push({
-        from,
-        to,
-        flight: selectedFlight,
-      });
-      scoreSum += selectedFlight.score;
+      return bestSubResult;
     }
 
-    if (isValid) {
+    const searchResult = search(0, null);
+    if (searchResult) {
+      const { legs, scoreSum } = searchResult;
       const totalPrice = legs.reduce((sum, leg) => sum + leg.flight.price, 0);
-      const totalDuration = legs.reduce((sum, leg) => sum + leg.flight.duration_minutes, 0);
-      
+      const totalDuration = legs.reduce(
+        (sum, leg) => sum + leg.flight.duration_minutes,
+        0,
+      );
+
       validItineraries.push({
         itinerary: {
           legs,
@@ -104,7 +157,8 @@ export function optimizeRoute(
   const challenger = validItineraries[1] ?? null;
 
   // 1. Build Ordering Counterfactual
-  let counterfactualLabel = "Nothing else within reason changes this routing decision.";
+  let counterfactualLabel =
+    'Nothing else within reason changes this routing decision.';
   if (challenger) {
     // Find a leg in the challenger's path that differs from the champion's path
     // We compute the price drop required on that leg to make the challenger win
@@ -120,7 +174,8 @@ export function optimizeRoute(
 
     if (diffLegIndex !== -1) {
       const targetLeg = challenger.legs[diffLegIndex];
-      const flightsOnTargetRoute = store.flightsByRoute.get(`${targetLeg.from}-${targetLeg.to}`) ?? [];
+      const flightsOnTargetRoute =
+        store.flightsByRoute.get(`${targetLeg.from}-${targetLeg.to}`) ?? [];
       const prices = flightsOnTargetRoute.map((f) => f.price);
       const minPrice = Math.min(...prices);
       const maxPrice = Math.max(...prices);
@@ -130,13 +185,18 @@ export function optimizeRoute(
         const scoreGap = champion.scoreSum - challenger.scoreSum;
         const demandAdj = 1.0; // Assume standard scaling for order comparison
         const holidayAdj = 1.0;
-        
+
         // Solve for price drop on this leg
-        const priceDrop = (scoreGap) * priceRange / (pref.cost_weight * demandAdj * holidayAdj);
+        const priceDrop =
+          (scoreGap * priceRange) / (pref.cost_weight * demandAdj * holidayAdj);
         const targetPrice = targetLeg.flight.price - priceDrop;
 
-        const nextWinnerCities = challenger.itinerary.cities.join(" → ");
-        if (priceDrop > 0 && targetPrice > 0 && priceDrop / targetLeg.flight.price <= 0.60) {
+        const nextWinnerCities = challenger.itinerary.cities.join(' → ');
+        if (
+          priceDrop > 0 &&
+          targetPrice > 0 &&
+          priceDrop / targetLeg.flight.price <= 0.6
+        ) {
           counterfactualLabel = `${nextWinnerCities} wins if the ${targetLeg.from} → ${targetLeg.to} leg price drops below $${Math.floor(targetPrice)}.`;
         }
       }
@@ -146,64 +206,136 @@ export function optimizeRoute(
   // 2. Build Alternatives
   const alternatives: Alternative[] = [];
   const makeAlt = (
-    kind: Alternative["kind"],
+    kind: Alternative['kind'],
     flight: FlightRow | null,
     gain: string,
     cost: string,
     deltaPrice: number,
-    deltaMinutes: number
+    deltaMinutes: number,
   ): Alternative => ({ kind, flight, gain, cost, deltaPrice, deltaMinutes });
 
   // Cheapest itinerary
-  const cheapestItinerary = [...validItineraries].sort((a, b) => a.itinerary.totalPrice - b.itinerary.totalPrice)[0];
-  if (cheapestItinerary.itinerary.totalPrice === champion.itinerary.totalPrice) {
-    alternatives.push(makeAlt("cheapest", champion.legs[0].flight, "You have the cheapest routing order", "", 0, 0));
-  } else {
-    const savings = champion.itinerary.totalPrice - cheapestItinerary.itinerary.totalPrice;
-    const timeLost = (cheapestItinerary.itinerary.totalDurationMinutes - champion.itinerary.totalDurationMinutes) / 60;
-    const citiesOrder = cheapestItinerary.itinerary.cities.join(" → ");
+  const cheapestItinerary = [...validItineraries].sort(
+    (a, b) => a.itinerary.totalPrice - b.itinerary.totalPrice,
+  )[0];
+  if (
+    cheapestItinerary.itinerary.totalPrice === champion.itinerary.totalPrice
+  ) {
     alternatives.push(
       makeAlt(
-        "cheapest",
+        'cheapest',
+        champion.legs[0].flight,
+        'You have the cheapest routing order',
+        '',
+        0,
+        0,
+      ),
+    );
+  } else {
+    const savings =
+      champion.itinerary.totalPrice - cheapestItinerary.itinerary.totalPrice;
+    const timeLost =
+      (cheapestItinerary.itinerary.totalDurationMinutes -
+        champion.itinerary.totalDurationMinutes) /
+      60;
+    const citiesOrder = cheapestItinerary.itinerary.cities.join(' → ');
+    alternatives.push(
+      makeAlt(
+        'cheapest',
         cheapestItinerary.legs[0].flight,
         `save $${Math.round(savings)} (order: ${citiesOrder})`,
-        timeLost > 0 ? `+${timeLost.toFixed(1)}h` : `save ${Math.abs(timeLost).toFixed(1)}h travel time`,
+        timeLost > 0
+          ? `+${timeLost.toFixed(1)}h`
+          : `save ${Math.abs(timeLost).toFixed(1)}h travel time`,
         -savings,
-        cheapestItinerary.itinerary.totalDurationMinutes - champion.itinerary.totalDurationMinutes
-      )
+        cheapestItinerary.itinerary.totalDurationMinutes -
+          champion.itinerary.totalDurationMinutes,
+      ),
     );
   }
 
   // Fastest itinerary
-  const fastestItinerary = [...validItineraries].sort((a, b) => a.itinerary.totalDurationMinutes - b.itinerary.totalDurationMinutes)[0];
-  if (fastestItinerary.itinerary.totalDurationMinutes === champion.itinerary.totalDurationMinutes) {
-    alternatives.push(makeAlt("fastest", champion.legs[0].flight, "You have the fastest routing order", "", 0, 0));
-  } else {
-    const timeSaved = (champion.itinerary.totalDurationMinutes - fastestItinerary.itinerary.totalDurationMinutes) / 60;
-    const extraCost = fastestItinerary.itinerary.totalPrice - champion.itinerary.totalPrice;
-    const citiesOrder = fastestItinerary.itinerary.cities.join(" → ");
+  const fastestItinerary = [...validItineraries].sort(
+    (a, b) =>
+      a.itinerary.totalDurationMinutes - b.itinerary.totalDurationMinutes,
+  )[0];
+  if (
+    fastestItinerary.itinerary.totalDurationMinutes ===
+    champion.itinerary.totalDurationMinutes
+  ) {
     alternatives.push(
       makeAlt(
-        "fastest",
+        'fastest',
+        champion.legs[0].flight,
+        'You have the fastest routing order',
+        '',
+        0,
+        0,
+      ),
+    );
+  } else {
+    const timeSaved =
+      (champion.itinerary.totalDurationMinutes -
+        fastestItinerary.itinerary.totalDurationMinutes) /
+      60;
+    const extraCost =
+      fastestItinerary.itinerary.totalPrice - champion.itinerary.totalPrice;
+    const citiesOrder = fastestItinerary.itinerary.cities.join(' → ');
+    alternatives.push(
+      makeAlt(
+        'fastest',
         fastestItinerary.legs[0].flight,
         `save ${timeSaved.toFixed(1)}h travel time (order: ${citiesOrder})`,
-        extraCost > 0 ? `+$${Math.round(extraCost)}` : `save $${Math.round(Math.abs(extraCost))}`,
+        extraCost > 0
+          ? `+$${Math.round(extraCost)}`
+          : `save $${Math.round(Math.abs(extraCost))}`,
         extraCost,
-        -(champion.itinerary.totalDurationMinutes - fastestItinerary.itinerary.totalDurationMinutes)
-      )
+        -(
+          champion.itinerary.totalDurationMinutes -
+          fastestItinerary.itinerary.totalDurationMinutes
+        ),
+      ),
     );
   }
 
   // Set placeholders for flexible, comfort, and date_shift since they are single-leg features
   // but they still need to render empty states or stubs
-  alternatives.push(makeAlt("flexible", null, "use single-leg mode for date flexibility", "", 0, 0));
-  alternatives.push(makeAlt("comfort", null, "use single-leg mode for cabin class checks", "", 0, 0));
-  alternatives.push(makeAlt("date_shift", null, "use single-leg mode for date shift alternatives", "", 0, 0));
+  alternatives.push(
+    makeAlt(
+      'flexible',
+      null,
+      'use single-leg mode for date flexibility',
+      '',
+      0,
+      0,
+    ),
+  );
+  alternatives.push(
+    makeAlt(
+      'comfort',
+      null,
+      'use single-leg mode for cabin class checks',
+      '',
+      0,
+      0,
+    ),
+  );
+  alternatives.push(
+    makeAlt(
+      'date_shift',
+      null,
+      'use single-leg mode for date shift alternatives',
+      '',
+      0,
+      0,
+    ),
+  );
 
   return {
     itinerary: champion.itinerary,
     alternatives,
     counterfactualLabel,
-    scoreGap: champion.scoreSum - (challenger?.scoreSum ?? champion.scoreSum - 0.2),
+    scoreGap:
+      champion.scoreSum - (challenger?.scoreSum ?? champion.scoreSum - 0.2),
   };
 }

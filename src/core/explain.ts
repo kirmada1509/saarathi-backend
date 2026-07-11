@@ -7,12 +7,19 @@
  * If GROQ_API_KEY isn't set or calls fail, falls back to a deterministic
  * template so the app never breaks.
  */
-import { ChatPromptTemplate } from "@langchain/core/prompts";
-import { StringOutputParser } from "@langchain/core/output_parsers";
-import { ChatGroq } from "@langchain/groq";
-import { InferredPreference, ScoredFlight, Alternative, Counterfactual, Confidence } from "./types";
+import { ChatPromptTemplate } from '@langchain/core/prompts';
+import { StringOutputParser } from '@langchain/core/output_parsers';
+import { ChatGroq } from '@langchain/groq';
+import {
+  InferredPreference,
+  ScoredFlight,
+  Alternative,
+  Counterfactual,
+  Confidence,
+} from './types';
 
-const PROMPT = ChatPromptTemplate.fromTemplate(`You are Saarathi, an expert travel strategist AI. A traveler ({userId}) asked: "{requestText}"
+const PROMPT =
+  ChatPromptTemplate.fromTemplate(`You are Saarathi, an expert travel strategist AI. A traveler ({userId}) asked: "{requestText}"
 
 Here is the structured and behavioral evidence we inferred for their travel preferences:
 {evidence}
@@ -35,33 +42,37 @@ function formatOptions(ranked: ScoredFlight[], topN = 3): string {
     .slice(0, topN)
     .map(
       (f, i) =>
-        `${i + 1}. ${f.airline_name} ${f.flight_numbers}: $${f.price.toFixed(0)}, ${(f.duration_minutes / 60).toFixed(
-          1
-        )}h, ${f.stops} stop(s), score=${f.score.toFixed(2)}`
+        `${i + 1}. ${f.airline_name} ${f.flight_numbers}: $${f.price.toFixed(0)}, ${(
+          f.duration_minutes / 60
+        ).toFixed(1)}h, ${f.stops} stop(s), score=${f.score.toFixed(2)}`,
     )
-    .join("\n");
+    .join('\n');
 }
 
 function formatAlternatives(alternatives: Alternative[]): string {
   return alternatives
-    .map((alt) => `- ${alt.kind}: ${alt.gain} (cost: ${alt.cost || "none"})`)
-    .join("\n");
+    .map((alt) => `- ${alt.kind}: ${alt.gain} (cost: ${alt.cost || 'none'})`)
+    .join('\n');
 }
 
 function formatCounterfactuals(cfs: Counterfactual[]): string {
   return cfs
-    .map((cf) => `- ${cf.label} (${cf.flips ? "FLIPS winner" : "no flip"})`)
-    .join("\n");
+    .map((cf) => `- ${cf.label} (${cf.flips ? 'FLIPS winner' : 'no flip'})`)
+    .join('\n');
 }
 
 function fallbackExplanation(
   userId: string,
   pref: InferredPreference,
   ranked: ScoredFlight[],
-  confidence: Confidence
+  confidence: Confidence,
 ): string {
   const best = ranked[0];
-  const lastEvidence = pref.evidence.map((e) => e.text).slice(-2).join(", ") || "structured profile data";
+  const lastEvidence =
+    pref.evidence
+      .map((e) => e.text)
+      .slice(-2)
+      .join(', ') || 'structured profile data';
   return (
     `For ${userId}, the top pick is ${best.airline_name} (${best.stops} stop(s), ` +
     `$${best.price.toFixed(0)}, ${(best.duration_minutes / 60).toFixed(1)}h) matching with ${confidence.matchPct}% score ` +
@@ -76,7 +87,7 @@ export async function explain(
   ranked: ScoredFlight[],
   alternatives: Alternative[],
   counterfactuals: Counterfactual[],
-  confidence: Confidence
+  confidence: Confidence,
 ): Promise<string> {
   if (ranked.length === 0) {
     return "No flights matched this traveler's hard constraints for this route — try a different destination or relax the layover limit.";
@@ -90,13 +101,15 @@ export async function explain(
   try {
     const model = new ChatGroq({
       apiKey,
-      model: "llama-3.3-70b-versatile",
+      model: 'llama-3.3-70b-versatile',
       temperature: 0.4,
     });
 
     const chain = PROMPT.pipe(model).pipe(new StringOutputParser());
 
-    const evidenceList = pref.evidence.map((e) => `- [${e.source} / ${e.dimension}] ${e.text}`).join("\n");
+    const evidenceList = pref.evidence
+      .map((e) => `- [${e.source} / ${e.dimension}] ${e.text}`)
+      .join('\n');
 
     return await chain.invoke({
       userId,
@@ -109,7 +122,7 @@ export async function explain(
       confidenceTier: confidence.tier,
     });
   } catch (err) {
-    console.error("Groq explanation call failed, using fallback:", err);
+    console.error('Groq explanation call failed, using fallback:', err);
     return fallbackExplanation(userId, pref, ranked, confidence);
   }
 }

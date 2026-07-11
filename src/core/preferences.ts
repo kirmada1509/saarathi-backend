@@ -1,5 +1,5 @@
-import { pipeline } from "@xenova/transformers";
-import { UserRow, InferredPreference, EvidenceItem } from "./types";
+import { pipeline, FeatureExtractionPipeline } from '@xenova/transformers';
+import { UserRow, InferredPreference, EvidenceItem } from './types';
 
 const DIRECT_BOOST = [
   /hate connections/i,
@@ -31,37 +31,49 @@ const CONVENIENCE_BOOST = [
   /pay to skip/i,
 ];
 
-const REDEYE_AVOID = [/redeyes? kill/i, /melt down at night/i, /morning departures/i];
+const REDEYE_AVOID = [
+  /redeyes? kill/i,
+  /melt down at night/i,
+  /morning departures/i,
+];
 const REDEYE_OK = [/ok with redeye/i, /happy .*redeye/i];
 
-const DIRECT_PREF_MAP: Record<string, number> = { strong: 0.9, moderate: 0.55, none: 0.15 };
-const PRICE_SENS_MAP: Record<string, number> = { low: 0.2, medium: 0.5, high: 0.85, none: 0.05 };
+const DIRECT_PREF_MAP: Record<string, number> = {
+  strong: 0.9,
+  moderate: 0.55,
+  none: 0.15,
+};
+const PRICE_SENS_MAP: Record<string, number> = {
+  low: 0.2,
+  medium: 0.5,
+  high: 0.85,
+  none: 0.05,
+};
 
 const ARCHETYPES = {
   direct: [
-    "I hate flight connections and layovers",
-    "I want to fly direct only",
-    "Direct flights are worth paying for",
+    'I hate flight connections and layovers',
+    'I want to fly direct only',
+    'Direct flights are worth paying for',
   ],
   cost: [
-    "I need the cheapest flight available",
-    "I am on a tight budget",
-    "Looking for rock-bottom fares",
+    'I need the cheapest flight available',
+    'I am on a tight budget',
+    'Looking for rock-bottom fares',
   ],
   convenience: [
-    "I prefer comfort and convenience over cost",
-    "Money is not a constraint for my travel",
-    "I want first class or business class service",
+    'I prefer comfort and convenience over cost',
+    'Money is not a constraint for my travel',
+    'I want first class or business class service',
   ],
   redeye: [
-    "I want to avoid overnight redeye flights",
-    "Redeyes kill my sleep and mornings",
-    "I hate flying through the night",
-  ]
+    'I want to avoid overnight redeye flights',
+    'Redeyes kill my sleep and mornings',
+    'I hate flying through the night',
+  ],
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let extractor: any = null;
+let extractor: FeatureExtractionPipeline | null = null;
 let modelLoading = false;
 const archetypeEmbeddings: Record<string, number[][]> = {};
 
@@ -69,33 +81,51 @@ export async function initEmbeddingModel() {
   if (extractor || modelLoading) return;
   modelLoading = true;
   try {
-    console.log("[Saarathi Embeddings] Initializing all-MiniLM-L6-v2 pipeline...");
+    console.log(
+      '[Saarathi Embeddings] Initializing all-MiniLM-L6-v2 pipeline...',
+    );
     extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
-    
+
     // Pre-calculate archetype embeddings
     for (const [dimension, phrases] of Object.entries(ARCHETYPES)) {
       archetypeEmbeddings[dimension] = [];
       for (const phrase of phrases) {
-        const out = await extractor(phrase, { pooling: 'mean', normalize: true });
+        const out = await extractor(phrase, {
+          pooling: 'mean',
+          normalize: true,
+        });
         archetypeEmbeddings[dimension].push(Array.from(out.data) as number[]);
       }
     }
-    console.log("[Saarathi Embeddings] Model and archetype embeddings loaded successfully.");
+    console.log(
+      '[Saarathi Embeddings] Model and archetype embeddings loaded successfully.',
+    );
   } catch (err) {
-    console.warn("[Saarathi Embeddings] Failed to load embedding model, falling back to rules-only mode:", err);
+    console.warn(
+      '[Saarathi Embeddings] Failed to load embedding model, falling back to rules-only mode:',
+      err,
+    );
   } finally {
     modelLoading = false;
   }
 }
 
-async function findEmbeddingMatch(phrase: string): Promise<{ dimension: string; similarity: number; archetype: string } | null> {
+async function findEmbeddingMatch(phrase: string): Promise<{
+  dimension: string;
+  similarity: number;
+  archetype: string;
+} | null> {
   if (!extractor) return null;
   try {
     const out = await extractor(phrase, { pooling: 'mean', normalize: true });
     const v = Array.from(out.data) as number[];
-    
-    let bestMatch: { dimension: string; similarity: number; archetype: string } | null = null;
-    
+
+    let bestMatch: {
+      dimension: string;
+      similarity: number;
+      archetype: string;
+    } | null = null;
+
     for (const [dimension, embedList] of Object.entries(archetypeEmbeddings)) {
       for (let i = 0; i < embedList.length; i++) {
         const archEmbed = embedList[i];
@@ -123,14 +153,19 @@ function countHits(text: string, patterns: RegExp[]): number {
   return patterns.reduce((n, p) => n + (p.test(text) ? 1 : 0), 0);
 }
 
-export async function inferPreferences(user: UserRow): Promise<InferredPreference> {
+export async function inferPreferences(
+  user: UserRow,
+): Promise<InferredPreference> {
   // Try to initialize embedding model (non-blocking if already loaded)
   if (!extractor && !modelLoading) {
     await initEmbeddingModel();
   }
 
-  const rawHistory = user.raw_history ?? "";
-  const phrases = rawHistory.split(" | ").map((p) => p.trim()).filter(Boolean);
+  const rawHistory = user.raw_history ?? '';
+  const phrases = rawHistory
+    .split(' | ')
+    .map((p) => p.trim())
+    .filter(Boolean);
   const evidence: EvidenceItem[] = [];
 
   let directWeight = DIRECT_PREF_MAP[user.direct_preference] ?? 0.3;
@@ -138,13 +173,13 @@ export async function inferPreferences(user: UserRow): Promise<InferredPreferenc
 
   evidence.push({
     text: `structured: direct_preference=${user.direct_preference} -> direct_weight=${directWeight}`,
-    source: "structured",
-    dimension: "direct",
+    source: 'structured',
+    dimension: 'direct',
   });
   evidence.push({
     text: `structured: price_sensitivity=${user.price_sensitivity} -> cost_weight=${costWeight}`,
-    source: "structured",
-    dimension: "cost",
+    source: 'structured',
+    dimension: 'cost',
   });
 
   let directHits = 0;
@@ -160,8 +195,8 @@ export async function inferPreferences(user: UserRow): Promise<InferredPreferenc
       directHits++;
       evidence.push({
         text: `raw_history: "${phrase}" signals direct-flight preference`,
-        source: "raw_history",
-        dimension: "direct",
+        source: 'raw_history',
+        dimension: 'direct',
       });
       matched = true;
     }
@@ -169,8 +204,8 @@ export async function inferPreferences(user: UserRow): Promise<InferredPreferenc
       costHits++;
       evidence.push({
         text: `raw_history: "${phrase}" signals price sensitivity`,
-        source: "raw_history",
-        dimension: "cost",
+        source: 'raw_history',
+        dimension: 'cost',
       });
       matched = true;
     }
@@ -178,8 +213,8 @@ export async function inferPreferences(user: UserRow): Promise<InferredPreferenc
       convHits++;
       evidence.push({
         text: `raw_history: "${phrase}" signals comfort-over-cost`,
-        source: "raw_history",
-        dimension: "convenience",
+        source: 'raw_history',
+        dimension: 'convenience',
       });
       matched = true;
     }
@@ -187,8 +222,8 @@ export async function inferPreferences(user: UserRow): Promise<InferredPreferenc
       avoidRedeyeHits++;
       evidence.push({
         text: `raw_history: "${phrase}" signals redeye avoidance`,
-        source: "raw_history",
-        dimension: "redeye",
+        source: 'raw_history',
+        dimension: 'redeye',
       });
       matched = true;
     }
@@ -196,8 +231,8 @@ export async function inferPreferences(user: UserRow): Promise<InferredPreferenc
       redeyeOkHits++;
       evidence.push({
         text: `raw_history: "${phrase}" signals redeye acceptance`,
-        source: "raw_history",
-        dimension: "redeye",
+        source: 'raw_history',
+        dimension: 'redeye',
       });
       matched = true;
     }
@@ -208,14 +243,15 @@ export async function inferPreferences(user: UserRow): Promise<InferredPreferenc
       if (embedMatch) {
         evidence.push({
           text: `embedding similarity: "${phrase}" matches archetype "${embedMatch.archetype}" (${Math.round(embedMatch.similarity * 100)}% similarity)`,
-          source: "embedding",
-          dimension: embedMatch.dimension as "direct" | "cost" | "convenience" | "redeye",
+          source: 'embedding',
+          dimension: embedMatch.dimension as
+            'direct' | 'cost' | 'convenience' | 'redeye',
         });
 
-        if (embedMatch.dimension === "direct") directHits++;
-        else if (embedMatch.dimension === "cost") costHits++;
-        else if (embedMatch.dimension === "convenience") convHits++;
-        else if (embedMatch.dimension === "redeye") avoidRedeyeHits++;
+        if (embedMatch.dimension === 'direct') directHits++;
+        else if (embedMatch.dimension === 'cost') costHits++;
+        else if (embedMatch.dimension === 'convenience') convHits++;
+        else if (embedMatch.dimension === 'redeye') avoidRedeyeHits++;
       }
     }
   }
@@ -234,24 +270,24 @@ export async function inferPreferences(user: UserRow): Promise<InferredPreferenc
 
   const avoidRedeye = avoidRedeyeHits > 0 && redeyeOkHits === 0;
 
-  const preferredAirlines = (user.preferred_airlines ?? "")
-    .split(";")
+  const preferredAirlines = (user.preferred_airlines ?? '')
+    .split(';')
     .map((a) => a.trim())
     .filter(Boolean);
 
   if (preferredAirlines.length > 0) {
     evidence.push({
-      text: `structured: preferred airlines are ${preferredAirlines.join(", ")}`,
-      source: "structured",
-      dimension: "airline",
+      text: `structured: preferred airlines are ${preferredAirlines.join(', ')}`,
+      source: 'structured',
+      dimension: 'airline',
     });
   }
 
   if (user.preferred_cabin) {
     evidence.push({
       text: `structured: preferred cabin is ${user.preferred_cabin}`,
-      source: "structured",
-      dimension: "cabin",
+      source: 'structured',
+      dimension: 'cabin',
     });
   }
 

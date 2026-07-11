@@ -25,21 +25,24 @@ function formatOptions(ranked, topN = 3) {
     return ranked
         .slice(0, topN)
         .map((f, i) => `${i + 1}. ${f.airline_name} ${f.flight_numbers}: $${f.price.toFixed(0)}, ${(f.duration_minutes / 60).toFixed(1)}h, ${f.stops} stop(s), score=${f.score.toFixed(2)}`)
-        .join("\n");
+        .join('\n');
 }
 function formatAlternatives(alternatives) {
     return alternatives
-        .map((alt) => `- ${alt.kind}: ${alt.gain} (cost: ${alt.cost || "none"})`)
-        .join("\n");
+        .map((alt) => `- ${alt.kind}: ${alt.gain} (cost: ${alt.cost || 'none'})`)
+        .join('\n');
 }
 function formatCounterfactuals(cfs) {
     return cfs
-        .map((cf) => `- ${cf.label} (${cf.flips ? "FLIPS winner" : "no flip"})`)
-        .join("\n");
+        .map((cf) => `- ${cf.label} (${cf.flips ? 'FLIPS winner' : 'no flip'})`)
+        .join('\n');
 }
 function fallbackExplanation(userId, pref, ranked, confidence) {
     const best = ranked[0];
-    const lastEvidence = pref.evidence.map((e) => e.text).slice(-2).join(", ") || "structured profile data";
+    const lastEvidence = pref.evidence
+        .map((e) => e.text)
+        .slice(-2)
+        .join(', ') || 'structured profile data';
     return (`For ${userId}, the top pick is ${best.airline_name} (${best.stops} stop(s), ` +
         `$${best.price.toFixed(0)}, ${(best.duration_minutes / 60).toFixed(1)}h) matching with ${confidence.matchPct}% score ` +
         `(${confidence.tier} confidence), based on: ${lastEvidence}.`);
@@ -55,11 +58,13 @@ async function explain(userId, requestText, pref, ranked, alternatives, counterf
     try {
         const model = new groq_1.ChatGroq({
             apiKey,
-            model: "llama-3.3-70b-versatile",
+            model: 'llama-3.3-70b-versatile',
             temperature: 0.4,
         });
         const chain = PROMPT.pipe(model).pipe(new output_parsers_1.StringOutputParser());
-        const evidenceList = pref.evidence.map((e) => `- [${e.source} / ${e.dimension}] ${e.text}`).join("\n");
+        const evidenceList = pref.evidence
+            .map((e) => `- [${e.source} / ${e.dimension}] ${e.text}`)
+            .join('\n');
         return await chain.invoke({
             userId,
             requestText,
@@ -72,7 +77,7 @@ async function explain(userId, requestText, pref, ranked, alternatives, counterf
         });
     }
     catch (err) {
-        console.error("Groq explanation call failed, using fallback:", err);
+        console.error('Groq explanation call failed, using fallback:', err);
         return fallbackExplanation(userId, pref, ranked, confidence);
     }
 }

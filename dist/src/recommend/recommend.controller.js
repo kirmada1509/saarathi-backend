@@ -23,12 +23,16 @@ const confidence_1 = require("../core/confidence");
 const explain_1 = require("../core/explain");
 const multicity_1 = require("../core/multicity");
 const PerturbationSchema = zod_1.z.union([
-    zod_1.z.object({ kind: zod_1.z.literal("price_drop"), flightId: zod_1.z.string(), toPrice: zod_1.z.number() }),
-    zod_1.z.object({ kind: zod_1.z.literal("accept_one_stop") }),
-    zod_1.z.object({ kind: zod_1.z.literal("bags_matter") }),
-    zod_1.z.object({ kind: zod_1.z.literal("evening_ok") }),
-    zod_1.z.object({ kind: zod_1.z.literal("ignore_loyalty") }),
-    zod_1.z.object({ kind: zod_1.z.literal("shift_dates"), days: zod_1.z.number() }),
+    zod_1.z.object({
+        kind: zod_1.z.literal('price_drop'),
+        flightId: zod_1.z.string(),
+        toPrice: zod_1.z.number(),
+    }),
+    zod_1.z.object({ kind: zod_1.z.literal('accept_one_stop') }),
+    zod_1.z.object({ kind: zod_1.z.literal('bags_matter') }),
+    zod_1.z.object({ kind: zod_1.z.literal('evening_ok') }),
+    zod_1.z.object({ kind: zod_1.z.literal('ignore_loyalty') }),
+    zod_1.z.object({ kind: zod_1.z.literal('shift_dates'), days: zod_1.z.number() }),
 ]);
 const RecommendRequestSchema = zod_1.z.object({
     userId: zod_1.z.string(),
@@ -54,7 +58,7 @@ let RecommendController = class RecommendController {
         const parsed = RecommendRequestSchema.safeParse(body);
         if (!parsed.success) {
             throw new common_1.BadRequestException({
-                error: "Invalid request body",
+                error: 'Invalid request body',
                 details: parsed.error.format(),
             });
         }
@@ -62,7 +66,9 @@ let RecommendController = class RecommendController {
         const store = (0, data_1.getStore)();
         const user = store.users.get(userId);
         if (!user) {
-            throw new common_1.NotFoundException({ error: `User with ID ${userId} not found.` });
+            throw new common_1.NotFoundException({
+                error: `User with ID ${userId} not found.`,
+            });
         }
         const basePref = await (0, preferences_1.inferPreferences)(user);
         const perturbedPref = (0, counterfactuals_1.applyPerturbations)(basePref, perturbations);
@@ -72,7 +78,7 @@ let RecommendController = class RecommendController {
             const mcResult = (0, multicity_1.optimizeRoute)(cities, perturbedPref);
             if (!mcResult) {
                 throw new common_1.NotFoundException({
-                    error: "No valid multi-city routes found. Please check date constraints and connection limits."
+                    error: 'No valid multi-city routes found. Please check date constraints and connection limits.',
                 });
             }
             const { itinerary, alternatives, counterfactualLabel, scoreGap } = mcResult;
@@ -86,25 +92,54 @@ let RecommendController = class RecommendController {
             const ranked = itinerary.legs.map((l) => l.flight);
             const counterfactuals = [
                 {
-                    perturbation: { kind: "accept_one_stop" },
+                    perturbation: { kind: 'accept_one_stop' },
                     label: counterfactualLabel,
                     newWinner: verdict,
-                    flips: counterfactualLabel !== "Nothing else within reason changes this routing decision.",
+                    flips: counterfactualLabel !==
+                        'Nothing else within reason changes this routing decision.',
                 },
             ];
             const confidence = (0, confidence_1.computeConfidence)(syntheticRanked, perturbedPref);
             const explanation = await (0, explain_1.explain)(userId, requestText, perturbedPref, [verdict], alternatives, counterfactuals, confidence);
             const trace = [
-                { id: "request", label: "Query Parse", payload: { userId, requestText, cities, perturbations } },
-                { id: "preferences", label: "Preferences Evidence", payload: perturbedPref.evidence },
-                { id: "constraints", label: "Itinerary Turnaround", payload: itinerary.legs.map(l => ({ from: l.from, to: l.to, flight_id: l.flight.flight_id })) },
-                { id: "candidates", label: "Optimal Routing Order", payload: itinerary.cities },
-                { id: "tradeoffs", label: "Itinerary Opportunity Cost", payload: alternatives },
-                { id: "counterfactuals", label: "Route Order Counterfactuals", payload: counterfactuals },
-                { id: "verdict", label: "Verdict Summary", payload: itinerary },
+                {
+                    id: 'request',
+                    label: 'Query Parse',
+                    payload: { userId, requestText, cities, perturbations },
+                },
+                {
+                    id: 'preferences',
+                    label: 'Preferences Evidence',
+                    payload: perturbedPref.evidence,
+                },
+                {
+                    id: 'constraints',
+                    label: 'Itinerary Turnaround',
+                    payload: itinerary.legs.map((l) => ({
+                        from: l.from,
+                        to: l.to,
+                        flight_id: l.flight.flight_id,
+                    })),
+                },
+                {
+                    id: 'candidates',
+                    label: 'Optimal Routing Order',
+                    payload: itinerary.cities,
+                },
+                {
+                    id: 'tradeoffs',
+                    label: 'Itinerary Opportunity Cost',
+                    payload: alternatives,
+                },
+                {
+                    id: 'counterfactuals',
+                    label: 'Route Order Counterfactuals',
+                    payload: counterfactuals,
+                },
+                { id: 'verdict', label: 'Verdict Summary', payload: itinerary },
             ];
             return {
-                mode: "multi-city",
+                mode: 'multi-city',
                 verdict,
                 ranked,
                 preference: perturbedPref,
@@ -135,8 +170,15 @@ let RecommendController = class RecommendController {
                 }
             }
             if (!destination) {
+                const homeAirport = user.home_airport;
+                const flightsFromHome = store.flightsByOrigin.get(homeAirport) ?? [];
+                if (flightsFromHome.length > 0) {
+                    destination = flightsFromHome[0].destination;
+                }
+            }
+            if (!destination) {
                 throw new common_1.BadRequestException({
-                    error: "Could not resolve destination. Please select a destination airport."
+                    error: 'Could not resolve destination. Please select a destination airport.',
                 });
             }
             const origin = parsed.data.origin ?? user.home_airport;
@@ -146,76 +188,106 @@ let RecommendController = class RecommendController {
             if (ranked.length === 0) {
                 const bindingStep = findBindingConstraint(filterTrace.steps);
                 let relaxedVerdict = null;
-                let relaxedExplanation = "";
-                let relaxedNote = "";
+                let relaxedNote = '';
                 if (bindingStep) {
-                    if (bindingStep.constraint.toLowerCase().includes("layover")) {
+                    if (bindingStep.constraint.toLowerCase().includes('layover')) {
                         const originalLayover = perturbedPref.max_layover_minutes;
                         const relaxedLayover = Math.round(originalLayover * 1.5);
-                        const relaxedPref = { ...perturbedPref, max_layover_minutes: relaxedLayover };
-                        const relaxedOpts = { origin, destination, perturbations, preferredDays };
+                        const relaxedPref = {
+                            ...perturbedPref,
+                            max_layover_minutes: relaxedLayover,
+                        };
+                        const relaxedOpts = {
+                            origin,
+                            destination,
+                            perturbations,
+                            preferredDays,
+                        };
                         const { ranked: relaxedRanked } = (0, ranking_1.filterAndRank)(routeFlights, relaxedPref, relaxedOpts);
                         if (relaxedRanked.length > 0) {
                             relaxedVerdict = relaxedRanked[0];
                             relaxedNote = ` [Relaxed: layover <= ${relaxedLayover}m]`;
-                            relaxedExplanation =
-                                `No flights matched. The binding constraint was "${bindingStep.constraint}" which eliminated ${bindingStep.removed} flight(s). ` +
-                                    `If you allow up to ${relaxedLayover} minutes layover, ${relaxedRanked.length} flight(s) open up. ` +
-                                    `Best option under relaxed constraints: ${relaxedVerdict.airline_name} ${relaxedVerdict.flight_numbers} at $${relaxedVerdict.price}.`;
                         }
                         else {
                             if (perturbedPref.avoid_redeye) {
-                                const relaxedPref2 = { ...relaxedPref, avoid_redeye: false };
+                                const relaxedPref2 = {
+                                    ...relaxedPref,
+                                    avoid_redeye: false,
+                                };
                                 const { ranked: relaxedRanked2 } = (0, ranking_1.filterAndRank)(routeFlights, relaxedPref2, relaxedOpts);
                                 if (relaxedRanked2.length > 0) {
                                     relaxedVerdict = relaxedRanked2[0];
                                     relaxedNote = ` [Relaxed: layover <= ${relaxedLayover}m + redeye ok]`;
-                                    relaxedExplanation =
-                                        `No flights matched. The binding constraint was "${bindingStep.constraint}" which eliminated ${bindingStep.removed} flight(s). ` +
-                                            `Relaxing to ${relaxedLayover}m layover and allowing redeye flights opens up ${relaxedRanked2.length} option(s). ` +
-                                            `Best option under relaxed constraints: ${relaxedVerdict.airline_name} ${relaxedVerdict.flight_numbers} at $${relaxedVerdict.price}.`;
                                 }
                             }
                         }
                     }
-                    else if (bindingStep.constraint.toLowerCase().includes("redeye") && perturbedPref.avoid_redeye) {
-                        const relaxedPref = { ...perturbedPref, avoid_redeye: false };
-                        const relaxedOpts = { origin, destination, perturbations, preferredDays };
+                    else if (bindingStep.constraint.toLowerCase().includes('redeye') &&
+                        perturbedPref.avoid_redeye) {
+                        const relaxedPref = {
+                            ...perturbedPref,
+                            avoid_redeye: false,
+                        };
+                        const relaxedOpts = {
+                            origin,
+                            destination,
+                            perturbations,
+                            preferredDays,
+                        };
                         const { ranked: relaxedRanked } = (0, ranking_1.filterAndRank)(routeFlights, relaxedPref, relaxedOpts);
                         if (relaxedRanked.length > 0) {
                             relaxedVerdict = relaxedRanked[0];
-                            relaxedNote = " [Relaxed: redeye ok]";
-                            relaxedExplanation =
-                                `No flights matched. The binding constraint was "${bindingStep.constraint}" which eliminated ${bindingStep.removed} flight(s). ` +
-                                    `If you allow redeye departures, ${relaxedRanked.length} flight(s) open up. ` +
-                                    `Best option: ${relaxedVerdict.airline_name} ${relaxedVerdict.flight_numbers} at $${relaxedVerdict.price}.`;
+                            relaxedNote = ' [Relaxed: redeye ok]';
                         }
                     }
                 }
                 const staticFallback = `No flights matched your hard constraints (layovers, dates, redeyes). ` +
                     (bindingStep
                         ? `The binding constraint was "${bindingStep.constraint}" which eliminated ${bindingStep.removed} flight(s). `
-                        : "") +
+                        : '') +
                     `Review the decision boundaries below to see what changes would produce recommendations.`;
                 const relaxedList = relaxedVerdict ? [relaxedVerdict] : [];
                 const alternatives = (0, ranking_1.selectAlternatives)(relaxedVerdict ? [relaxedVerdict] : [], user);
                 const counterfactuals = (0, counterfactuals_1.computeCounterfactuals)(relaxedVerdict ? [relaxedVerdict] : [], perturbedPref, routeFlights, opts);
                 const confidence = (0, confidence_1.computeConfidence)(relaxedVerdict ? [relaxedVerdict] : [], perturbedPref);
-                const contextText = relaxedExplanation || staticFallback;
                 const finalExplanation = relaxedVerdict
                     ? await (0, explain_1.explain)(userId, requestText, perturbedPref, relaxedList, alternatives, counterfactuals, confidence)
                     : staticFallback;
                 const trace = [
-                    { id: "request", label: "Query Parse", payload: { userId, requestText, destination, perturbations } },
-                    { id: "preferences", label: "Preferences Evidence", payload: perturbedPref.evidence },
-                    { id: "constraints", label: "Hard Constraints Applied", payload: filterTrace.steps },
-                    { id: "candidates", label: "Scored Candidates", payload: relaxedList.map(r => ({ id: r.flight_id, score: r.score, note: relaxedNote })) },
-                    { id: "tradeoffs", label: "Opportunity Cost", payload: alternatives },
-                    { id: "counterfactuals", label: "Decision Boundary Advice", payload: counterfactuals },
-                    { id: "verdict", label: "Verdict Summary", payload: relaxedVerdict },
+                    {
+                        id: 'request',
+                        label: 'Query Parse',
+                        payload: { userId, requestText, destination, perturbations },
+                    },
+                    {
+                        id: 'preferences',
+                        label: 'Preferences Evidence',
+                        payload: perturbedPref.evidence,
+                    },
+                    {
+                        id: 'constraints',
+                        label: 'Hard Constraints Applied',
+                        payload: filterTrace.steps,
+                    },
+                    {
+                        id: 'candidates',
+                        label: 'Scored Candidates',
+                        payload: relaxedList.map((r) => ({
+                            id: r.flight_id,
+                            score: r.score,
+                            note: relaxedNote,
+                        })),
+                    },
+                    { id: 'tradeoffs', label: 'Opportunity Cost', payload: alternatives },
+                    {
+                        id: 'counterfactuals',
+                        label: 'Decision Boundary Advice',
+                        payload: counterfactuals,
+                    },
+                    { id: 'verdict', label: 'Verdict Summary', payload: relaxedVerdict },
                 ];
                 return {
-                    mode: "single-leg",
+                    mode: 'single-leg',
                     verdict: relaxedVerdict,
                     ranked: relaxedList,
                     preference: perturbedPref,
@@ -223,7 +295,7 @@ let RecommendController = class RecommendController {
                     counterfactuals,
                     confidence,
                     trace,
-                    explanation: (relaxedNote ? `[${relaxedNote.trim()}] ` : "") + finalExplanation,
+                    explanation: (relaxedNote ? `[${relaxedNote.trim()}] ` : '') + finalExplanation,
                     appliedPerturbations: perturbations,
                 };
             }
@@ -233,16 +305,40 @@ let RecommendController = class RecommendController {
             const confidence = (0, confidence_1.computeConfidence)(ranked, perturbedPref);
             const explanation = await (0, explain_1.explain)(userId, requestText, perturbedPref, ranked, alternatives, counterfactuals, confidence);
             const trace = [
-                { id: "request", label: "Query Parse", payload: { userId, requestText, destination, perturbations } },
-                { id: "preferences", label: "Preferences Evidence", payload: perturbedPref.evidence },
-                { id: "constraints", label: "Hard Constraints Applied", payload: filterTrace.steps },
-                { id: "candidates", label: "Scored Candidates", payload: ranked.map(r => ({ id: r.flight_id, score: r.score, breakdown: r.breakdown })) },
-                { id: "tradeoffs", label: "Opportunity Cost", payload: alternatives },
-                { id: "counterfactuals", label: "Decision Boundaries", payload: counterfactuals },
-                { id: "verdict", label: "Verdict Summary", payload: verdict },
+                {
+                    id: 'request',
+                    label: 'Query Parse',
+                    payload: { userId, requestText, destination, perturbations },
+                },
+                {
+                    id: 'preferences',
+                    label: 'Preferences Evidence',
+                    payload: perturbedPref.evidence,
+                },
+                {
+                    id: 'constraints',
+                    label: 'Hard Constraints Applied',
+                    payload: filterTrace.steps,
+                },
+                {
+                    id: 'candidates',
+                    label: 'Scored Candidates',
+                    payload: ranked.map((r) => ({
+                        id: r.flight_id,
+                        score: r.score,
+                        breakdown: r.breakdown,
+                    })),
+                },
+                { id: 'tradeoffs', label: 'Opportunity Cost', payload: alternatives },
+                {
+                    id: 'counterfactuals',
+                    label: 'Decision Boundaries',
+                    payload: counterfactuals,
+                },
+                { id: 'verdict', label: 'Verdict Summary', payload: verdict },
             ];
             return {
-                mode: "single-leg",
+                mode: 'single-leg',
                 verdict,
                 ranked,
                 preference: perturbedPref,

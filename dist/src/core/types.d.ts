@@ -6,11 +6,11 @@ export interface UserRow {
     frequent_flyer: string;
     preferred_airlines: string;
     preferred_cabin: string;
-    price_sensitivity: "low" | "medium" | "high" | "none";
-    direct_preference: "strong" | "moderate" | "none";
+    price_sensitivity: 'low' | 'medium' | 'high' | 'none';
+    direct_preference: 'strong' | 'moderate' | 'none';
     max_layover_minutes: number;
     date_flexibility_days: number;
-    multi_city_tendency: "low" | "medium" | "high";
+    multi_city_tendency: 'low' | 'medium' | 'high';
     trip_purpose: string;
     preferred_departure: string;
     baggage_preference: string;
@@ -41,14 +41,14 @@ export interface FlightRow {
     on_time_performance: number;
     baggage_included: boolean;
     refundable: boolean;
-    demand_level: "low" | "medium" | "high";
+    demand_level: 'low' | 'medium' | 'high';
     season: string;
     is_holiday_season: boolean;
 }
 export interface EvidenceItem {
     text: string;
-    source: "structured" | "raw_history" | "embedding";
-    dimension: "direct" | "cost" | "convenience" | "redeye" | "airline" | "cabin";
+    source: 'structured' | 'raw_history' | 'embedding';
+    dimension: 'direct' | 'cost' | 'convenience' | 'redeye' | 'airline' | 'cabin';
 }
 export interface FilterTrace {
     steps: {
@@ -95,19 +95,19 @@ export interface MultiCityItinerary {
     cities: string[];
 }
 export type Perturbation = {
-    kind: "price_drop";
+    kind: 'price_drop';
     flightId: string;
     toPrice: number;
 } | {
-    kind: "accept_one_stop";
+    kind: 'accept_one_stop';
 } | {
-    kind: "bags_matter";
+    kind: 'bags_matter';
 } | {
-    kind: "evening_ok";
+    kind: 'evening_ok';
 } | {
-    kind: "ignore_loyalty";
+    kind: 'ignore_loyalty';
 } | {
-    kind: "shift_dates";
+    kind: 'shift_dates';
     days: number;
 };
 export interface Counterfactual {
@@ -118,17 +118,17 @@ export interface Counterfactual {
 }
 export interface Confidence {
     matchPct: number;
-    tier: "high" | "medium" | "low";
+    tier: 'high' | 'medium' | 'low';
     strongSignals: string[];
     weakSignals: string[];
 }
 export interface TraceStage {
-    id: "request" | "preferences" | "constraints" | "candidates" | "tradeoffs" | "counterfactuals" | "verdict";
+    id: 'request' | 'preferences' | 'constraints' | 'candidates' | 'tradeoffs' | 'counterfactuals' | 'verdict';
     label: string;
     payload: unknown;
 }
 export interface Alternative {
-    kind: "cheapest" | "fastest" | "flexible" | "comfort" | "date_shift";
+    kind: 'cheapest' | 'fastest' | 'flexible' | 'comfort' | 'date_shift';
     flight: FlightRow | null;
     gain: string;
     cost: string;
@@ -136,7 +136,7 @@ export interface Alternative {
     deltaMinutes: number;
 }
 export interface RecommendResponse {
-    mode: "single-leg" | "multi-city";
+    mode: 'single-leg' | 'multi-city';
     verdict: ScoredFlight | null;
     ranked: ScoredFlight[];
     preference: InferredPreference;

@@ -1,4 +1,4 @@
-import { FlightRow, UserRow, InferredPreference, ScoredFlight, FilterTrace, Alternative, Perturbation } from "./types";
+import { FlightRow, UserRow, InferredPreference, ScoredFlight, FilterTrace, Alternative, Perturbation } from './types';
 export declare function filterAndRank(flights: FlightRow[], pref: InferredPreference, opts?: {
     origin?: string;
     destination?: string;

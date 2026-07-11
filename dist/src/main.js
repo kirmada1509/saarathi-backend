@@ -12,5 +12,5 @@ async function bootstrap() {
     console.log('[Saarathi Backend] Listening on port 4000...');
     await app.listen(4000);
 }
-bootstrap();
+void bootstrap();
 //# sourceMappingURL=main.js.map

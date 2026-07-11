@@ -32,7 +32,7 @@ async function main() {
   const userPath = resolveDataPath("user_data.csv");
   console.log(`Reading users from ${userPath}`);
   const userCsv = fs.readFileSync(userPath, "utf-8");
-  const userParseResult = Papa.parse(userCsv, { header: true, skipEmptyLines: true });
+  const userParseResult = Papa.parse<Record<string, unknown>>(userCsv, { header: true, skipEmptyLines: true });
   
   const userRows = userParseResult.data.map((row) => coerceUserRow(row));
   console.log(`Parsed ${userRows.length} users. Seeding...`);
@@ -67,7 +67,7 @@ async function main() {
   const flightPath = resolveDataPath("flights_data.csv");
   console.log(`Reading flights from ${flightPath}`);
   const flightCsv = fs.readFileSync(flightPath, "utf-8");
-  const flightParseResult = Papa.parse(flightCsv, { header: true, skipEmptyLines: true });
+  const flightParseResult = Papa.parse<Record<string, unknown>>(flightCsv, { header: true, skipEmptyLines: true });
   
   const flightRows = flightParseResult.data.map((row) => coerceFlightRow(row));
   console.log(`Parsed ${flightRows.length} flights. Seeding in chunks...`);

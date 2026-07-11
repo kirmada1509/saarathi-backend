@@ -1,6 +1,6 @@
 # Saarathi — Benchmark Evaluation Report
 
-**Date:** 2026-07-10T21:34:06.815Z
+**Date:** 2026-07-10T21:41:42.879Z
 **API:** http://localhost:4000
 
 ## Summary
@@ -43,7 +43,7 @@
 ```
 
 **LLM Rationale Preview:**
-> The #1 ranked flight, American Airlines AA351, is the best match for this traveler due to their strong preference for direct flights (direct_weight=0.9) and preferred airline (AA). They are making a t
+> The #1 ranked flight, American Airlines AA351, is the best match for this traveler due to their strong preference for direct flights (direct_weight=0.9) and preferred airline (AA). They are willing to
 
 ---
 
@@ -188,7 +188,7 @@
 ```
 
 **LLM Rationale Preview:**
-> [[Relaxed: layover <= 135m]] The #1 ranked flight, ANA NH9376;NH796, is the best match for this traveler due to their strong preference for direct flights, but with a willingness to accept one stop as
+> [[Relaxed: layover <= 135m]] The #1 ranked flight, ANA NH9376;NH796, is the best match for this traveler due to their strong preference for direct flights (direct_weight=0.9) being outweighed by their
 
 ---
 
@@ -225,7 +225,7 @@
 ```
 
 **LLM Rationale Preview:**
-> The #1 ranked flight, Qatar Airways QR5395, is the best match for this traveler due to its alignment with their high price sensitivity, as evidenced by their "broke student, absolute cheapest only" ra
+> The #1 ranked flight, Qatar Airways QR5395, is the best match for this traveler due to their high price sensitivity, as evidenced by their raw history ("broke student, absolute cheapest only") and str
 
 ---
 

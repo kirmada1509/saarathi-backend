@@ -30,31 +30,44 @@ const CONVENIENCE_BOOST = [
     /spa lounge/i,
     /pay to skip/i,
 ];
-const REDEYE_AVOID = [/redeyes? kill/i, /melt down at night/i, /morning departures/i];
+const REDEYE_AVOID = [
+    /redeyes? kill/i,
+    /melt down at night/i,
+    /morning departures/i,
+];
 const REDEYE_OK = [/ok with redeye/i, /happy .*redeye/i];
-const DIRECT_PREF_MAP = { strong: 0.9, moderate: 0.55, none: 0.15 };
-const PRICE_SENS_MAP = { low: 0.2, medium: 0.5, high: 0.85, none: 0.05 };
+const DIRECT_PREF_MAP = {
+    strong: 0.9,
+    moderate: 0.55,
+    none: 0.15,
+};
+const PRICE_SENS_MAP = {
+    low: 0.2,
+    medium: 0.5,
+    high: 0.85,
+    none: 0.05,
+};
 const ARCHETYPES = {
     direct: [
-        "I hate flight connections and layovers",
-        "I want to fly direct only",
-        "Direct flights are worth paying for",
+        'I hate flight connections and layovers',
+        'I want to fly direct only',
+        'Direct flights are worth paying for',
     ],
     cost: [
-        "I need the cheapest flight available",
-        "I am on a tight budget",
-        "Looking for rock-bottom fares",
+        'I need the cheapest flight available',
+        'I am on a tight budget',
+        'Looking for rock-bottom fares',
     ],
     convenience: [
-        "I prefer comfort and convenience over cost",
-        "Money is not a constraint for my travel",
-        "I want first class or business class service",
+        'I prefer comfort and convenience over cost',
+        'Money is not a constraint for my travel',
+        'I want first class or business class service',
     ],
     redeye: [
-        "I want to avoid overnight redeye flights",
-        "Redeyes kill my sleep and mornings",
-        "I hate flying through the night",
-    ]
+        'I want to avoid overnight redeye flights',
+        'Redeyes kill my sleep and mornings',
+        'I hate flying through the night',
+    ],
 };
 let extractor = null;
 let modelLoading = false;
@@ -64,19 +77,22 @@ async function initEmbeddingModel() {
         return;
     modelLoading = true;
     try {
-        console.log("[Saarathi Embeddings] Initializing all-MiniLM-L6-v2 pipeline...");
+        console.log('[Saarathi Embeddings] Initializing all-MiniLM-L6-v2 pipeline...');
         extractor = await (0, transformers_1.pipeline)('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
         for (const [dimension, phrases] of Object.entries(ARCHETYPES)) {
             archetypeEmbeddings[dimension] = [];
             for (const phrase of phrases) {
-                const out = await extractor(phrase, { pooling: 'mean', normalize: true });
+                const out = await extractor(phrase, {
+                    pooling: 'mean',
+                    normalize: true,
+                });
                 archetypeEmbeddings[dimension].push(Array.from(out.data));
             }
         }
-        console.log("[Saarathi Embeddings] Model and archetype embeddings loaded successfully.");
+        console.log('[Saarathi Embeddings] Model and archetype embeddings loaded successfully.');
     }
     catch (err) {
-        console.warn("[Saarathi Embeddings] Failed to load embedding model, falling back to rules-only mode:", err);
+        console.warn('[Saarathi Embeddings] Failed to load embedding model, falling back to rules-only mode:', err);
     }
     finally {
         modelLoading = false;
@@ -118,20 +134,23 @@ async function inferPreferences(user) {
     if (!extractor && !modelLoading) {
         await initEmbeddingModel();
     }
-    const rawHistory = user.raw_history ?? "";
-    const phrases = rawHistory.split(" | ").map((p) => p.trim()).filter(Boolean);
+    const rawHistory = user.raw_history ?? '';
+    const phrases = rawHistory
+        .split(' | ')
+        .map((p) => p.trim())
+        .filter(Boolean);
     const evidence = [];
     let directWeight = DIRECT_PREF_MAP[user.direct_preference] ?? 0.3;
     let costWeight = PRICE_SENS_MAP[user.price_sensitivity] ?? 0.5;
     evidence.push({
         text: `structured: direct_preference=${user.direct_preference} -> direct_weight=${directWeight}`,
-        source: "structured",
-        dimension: "direct",
+        source: 'structured',
+        dimension: 'direct',
     });
     evidence.push({
         text: `structured: price_sensitivity=${user.price_sensitivity} -> cost_weight=${costWeight}`,
-        source: "structured",
-        dimension: "cost",
+        source: 'structured',
+        dimension: 'cost',
     });
     let directHits = 0;
     let costHits = 0;
@@ -144,8 +163,8 @@ async function inferPreferences(user) {
             directHits++;
             evidence.push({
                 text: `raw_history: "${phrase}" signals direct-flight preference`,
-                source: "raw_history",
-                dimension: "direct",
+                source: 'raw_history',
+                dimension: 'direct',
             });
             matched = true;
         }
@@ -153,8 +172,8 @@ async function inferPreferences(user) {
             costHits++;
             evidence.push({
                 text: `raw_history: "${phrase}" signals price sensitivity`,
-                source: "raw_history",
-                dimension: "cost",
+                source: 'raw_history',
+                dimension: 'cost',
             });
             matched = true;
         }
@@ -162,8 +181,8 @@ async function inferPreferences(user) {
             convHits++;
             evidence.push({
                 text: `raw_history: "${phrase}" signals comfort-over-cost`,
-                source: "raw_history",
-                dimension: "convenience",
+                source: 'raw_history',
+                dimension: 'convenience',
             });
             matched = true;
         }
@@ -171,8 +190,8 @@ async function inferPreferences(user) {
             avoidRedeyeHits++;
             evidence.push({
                 text: `raw_history: "${phrase}" signals redeye avoidance`,
-                source: "raw_history",
-                dimension: "redeye",
+                source: 'raw_history',
+                dimension: 'redeye',
             });
             matched = true;
         }
@@ -180,8 +199,8 @@ async function inferPreferences(user) {
             redeyeOkHits++;
             evidence.push({
                 text: `raw_history: "${phrase}" signals redeye acceptance`,
-                source: "raw_history",
-                dimension: "redeye",
+                source: 'raw_history',
+                dimension: 'redeye',
             });
             matched = true;
         }
@@ -190,16 +209,16 @@ async function inferPreferences(user) {
             if (embedMatch) {
                 evidence.push({
                     text: `embedding similarity: "${phrase}" matches archetype "${embedMatch.archetype}" (${Math.round(embedMatch.similarity * 100)}% similarity)`,
-                    source: "embedding",
+                    source: 'embedding',
                     dimension: embedMatch.dimension,
                 });
-                if (embedMatch.dimension === "direct")
+                if (embedMatch.dimension === 'direct')
                     directHits++;
-                else if (embedMatch.dimension === "cost")
+                else if (embedMatch.dimension === 'cost')
                     costHits++;
-                else if (embedMatch.dimension === "convenience")
+                else if (embedMatch.dimension === 'convenience')
                     convHits++;
-                else if (embedMatch.dimension === "redeye")
+                else if (embedMatch.dimension === 'redeye')
                     avoidRedeyeHits++;
             }
         }
@@ -215,22 +234,22 @@ async function inferPreferences(user) {
         convenienceWeight = Math.min(1, convenienceWeight + 0.15 * convHits);
     }
     const avoidRedeye = avoidRedeyeHits > 0 && redeyeOkHits === 0;
-    const preferredAirlines = (user.preferred_airlines ?? "")
-        .split(";")
+    const preferredAirlines = (user.preferred_airlines ?? '')
+        .split(';')
         .map((a) => a.trim())
         .filter(Boolean);
     if (preferredAirlines.length > 0) {
         evidence.push({
-            text: `structured: preferred airlines are ${preferredAirlines.join(", ")}`,
-            source: "structured",
-            dimension: "airline",
+            text: `structured: preferred airlines are ${preferredAirlines.join(', ')}`,
+            source: 'structured',
+            dimension: 'airline',
         });
     }
     if (user.preferred_cabin) {
         evidence.push({
             text: `structured: preferred cabin is ${user.preferred_cabin}`,
-            source: "structured",
-            dimension: "cabin",
+            source: 'structured',
+            dimension: 'cabin',
         });
     }
     return {
