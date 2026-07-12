@@ -1,9 +1,4 @@
-import {
-  Controller,
-  Post,
-  Body,
-  BadRequestException,
-} from '@nestjs/common';
+import { Controller, Post, Body, BadRequestException } from '@nestjs/common';
 import { z } from 'zod';
 import { RecommendService } from './recommend.service';
 
