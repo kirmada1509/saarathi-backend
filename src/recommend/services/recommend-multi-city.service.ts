@@ -1,14 +1,14 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { optimizeRoute } from '../core/multicity';
-import { computeConfidence } from '../core/confidence';
-import { explain } from '../core/explain';
+import { optimizeRoute } from '../../core/multicity';
+import { computeConfidence } from '../../core/confidence';
+import { explain } from '../../core/explain';
 import {
   TraceStage,
   ScoredFlight,
   InferredPreference,
   RecommendResponse,
   Perturbation,
-} from '../core/types';
+} from '../../core/types';
 
 @Injectable()
 export class RecommendMultiCityService {

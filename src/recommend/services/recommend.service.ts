@@ -1,10 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { getStore } from '../core/data';
-import { inferPreferences } from '../core/preferences';
-import { applyPerturbations } from '../core/counterfactuals';
+import { getStore } from '../../core/data';
+import { inferPreferences } from '../../core/preferences';
+import { applyPerturbations } from '../../core/counterfactuals';
 import { RecommendSingleLegService } from './recommend-single-leg.service';
 import { RecommendMultiCityService } from './recommend-multi-city.service';
-import { RecommendResponse, Perturbation } from '../core/types';
+import { RecommendResponse, Perturbation } from '../../core/types';
 
 @Injectable()
 export class RecommendService {

@@ -1,6 +1,6 @@
 import { Controller, Post, Body, BadRequestException } from '@nestjs/common';
 import { z } from 'zod';
-import { RecommendService } from './recommend.service';
+import { RecommendService } from './services/recommend.service';
 
 const PerturbationSchema = z.union([
   z.object({
