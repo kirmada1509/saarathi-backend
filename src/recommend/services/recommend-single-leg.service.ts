@@ -3,7 +3,7 @@ import { getStore, DataStore } from '../../core/data';
 import { filterAndRank, selectAlternatives } from '../../core/ranking';
 import { computeCounterfactuals } from '../../core/counterfactuals';
 import { computeConfidence } from '../../core/confidence';
-import { explain } from '../../core/explain';
+import { CortexService } from '../../cortex/cortex.service';
 import {
   TraceStage,
   ScoredFlight,
@@ -20,6 +20,7 @@ import {
 
 @Injectable()
 export class RecommendSingleLegService {
+  constructor(private readonly cortexService: CortexService) {}
   async getRecommendation(
     userId: string,
     requestText: string,
@@ -88,8 +89,8 @@ export class RecommendSingleLegService {
       );
       confidence = computeConfidence(ranked, perturbedPref);
 
-      // LLM explanation
-      explanation = await explain(
+      // LLM explanation via LlmService
+      explanation = await this.cortexService.generateExplanation(
         userId,
         requestText,
         perturbedPref,

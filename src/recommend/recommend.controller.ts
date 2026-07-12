@@ -1,6 +1,7 @@
 import { Controller, Post, Body, BadRequestException } from '@nestjs/common';
 import { z } from 'zod';
 import { RecommendService } from './services/recommend.service';
+import { RouteParserService } from './services/routeparser.service';
 
 const PerturbationSchema = z.union([
   z.object({
@@ -27,7 +28,10 @@ const RecommendRequestSchema = z.object({
 
 @Controller('api/recommend')
 export class RecommendController {
-  constructor(private readonly recommendService: RecommendService) {}
+  constructor(
+    private readonly recommendService: RecommendService,
+    private readonly routeParserService: RouteParserService,
+  ) {}
 
   @Post('parse-route')
   async parseRoute(@Body() body: any) {
@@ -45,7 +49,7 @@ export class RecommendController {
       });
     }
 
-    return this.recommendService.parseRouteFromRequest(
+    return this.routeParserService.parseRouteFromRequest(
       parsed.data.userId,
       parsed.data.requestText,
     );

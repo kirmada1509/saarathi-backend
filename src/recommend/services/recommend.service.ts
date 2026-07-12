@@ -1,120 +1,19 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { getStore, DataStore } from '../../core/data';
+import { getStore } from '../../core/data';
 import { inferPreferences } from '../../core/preferences';
 import { applyPerturbations } from '../../core/counterfactuals';
 import { RecommendSingleLegService } from './recommend-single-leg.service';
 import { RecommendMultiCityService } from './recommend-multi-city.service';
 import { RecommendResponse, Perturbation } from '../../core/types';
-import { parseRouteWithLLM } from '../../core/route-parser';
+import { RouteParserService } from './routeparser.service';
 
 @Injectable()
 export class RecommendService {
   constructor(
     private readonly singleLegService: RecommendSingleLegService,
     private readonly multiCityService: RecommendMultiCityService,
+    private readonly routeParserService: RouteParserService,
   ) {}
-
-  async parseRouteFromRequest(userId: string, requestText: string) {
-    const store = getStore();
-    const user = store.users.get(userId);
-    if (!user) {
-      throw new NotFoundException({
-        error: `User with ID ${userId} not found.`,
-      });
-    }
-
-    // 1. Try LLM first
-    const llmParsed = await parseRouteWithLLM(requestText, user.home_airport);
-    if (llmParsed) {
-      const placeNames: Record<string, string> = {};
-      if (llmParsed.destination && store.airports.has(llmParsed.destination)) {
-        placeNames[llmParsed.destination] = store.airports.get(
-          llmParsed.destination,
-        )!.city;
-      }
-      if (llmParsed.origin && store.airports.has(llmParsed.origin)) {
-        placeNames[llmParsed.origin] = store.airports.get(
-          llmParsed.origin,
-        )!.city;
-      }
-      if (llmParsed.cities) {
-        llmParsed.cities.forEach((city) => {
-          if (store.airports.has(city)) {
-            placeNames[city] = store.airports.get(city)!.city;
-          }
-        });
-      }
-
-      if (llmParsed.cities && llmParsed.cities.length > 0) {
-        const stayDurations = llmParsed.stayDurations || {};
-        llmParsed.cities.forEach((city) => {
-          if (stayDurations[city] == null) {
-            stayDurations[city] = 2;
-          }
-        });
-        return {
-          mode: 'multi' as const,
-          destination: undefined,
-          origin: undefined,
-          cities: llmParsed.cities,
-          stayDurations,
-          placeNames,
-        };
-      } else {
-        return {
-          mode: 'single' as const,
-          destination: llmParsed.destination || undefined,
-          origin: llmParsed.origin || undefined,
-          cities: undefined,
-          stayDurations: {},
-          placeNames,
-        };
-      }
-    }
-
-    // 2. Fallback to Regex
-    const route = this.inferRouteFromText(
-      requestText,
-      user.home_airport,
-      store,
-    );
-    const placeNames: Record<string, string> = {};
-    if (route.destination && store.airports.has(route.destination)) {
-      placeNames[route.destination] = store.airports.get(
-        route.destination,
-      )!.city;
-    }
-    if (route.cities) {
-      route.cities.forEach((city) => {
-        if (store.airports.has(city)) {
-          placeNames[city] = store.airports.get(city)!.city;
-        }
-      });
-    }
-
-    let resolvedStayDurations: Record<string, number> = {};
-    if (route.cities && route.cities.length > 0) {
-      resolvedStayDurations = this.parseStayDurationsFromText(
-        requestText,
-        store,
-      );
-      // Pre-fill missing stays with 2 nights
-      route.cities.forEach((city) => {
-        if (resolvedStayDurations[city] == null) {
-          resolvedStayDurations[city] = 2;
-        }
-      });
-    }
-
-    return {
-      mode: route.cities ? ('multi' as const) : ('single' as const),
-      destination: route.destination,
-      origin: undefined,
-      cities: route.cities,
-      stayDurations: resolvedStayDurations,
-      placeNames,
-    };
-  }
 
   async getRecommendation(data: {
     userId: string;
@@ -143,7 +42,7 @@ export class RecommendService {
     const perturbedPref = applyPerturbations(basePref, perturbations);
 
     // 4. Resolve Route (smart inference if not explicitly provided)
-    let resolvedOrigin = data.origin;
+    const resolvedOrigin = data.origin;
     let resolvedDestination = data.destination;
     let resolvedCities = data.cities;
     let resolvedStayDurations = data.stayDurations;
@@ -152,33 +51,19 @@ export class RecommendService {
       !resolvedDestination &&
       (!resolvedCities || resolvedCities.length === 0)
     ) {
-      // Try LLM first
-      const llmParsed = await parseRouteWithLLM(requestText, user.home_airport);
-      if (llmParsed) {
-        if (llmParsed.cities && llmParsed.cities.length > 0) {
-          resolvedCities = llmParsed.cities;
-          resolvedStayDurations = llmParsed.stayDurations || {};
-        } else {
-          resolvedOrigin = llmParsed.origin || undefined;
-          resolvedDestination = llmParsed.destination || undefined;
-        }
-      } else {
-        // Fallback to Regex
-        const inferred = this.inferRouteFromText(
-          requestText,
-          user.home_airport,
-          store,
-        );
-        resolvedDestination = inferred.destination;
-        resolvedCities = inferred.cities;
-      }
+      // Resolve route only when it was not provided explicitly.
+      const inferred = this.routeParserService.inferRouteFromText(
+        requestText,
+        user.home_airport,
+        store,
+      );
+      resolvedDestination = inferred.destination;
+      resolvedCities = inferred.cities;
     }
 
     if (!resolvedStayDurations && resolvedCities && resolvedCities.length > 0) {
-      resolvedStayDurations = this.parseStayDurationsFromText(
-        requestText,
-        store,
-      );
+      resolvedStayDurations =
+        this.routeParserService.parseStayDurationsFromText(requestText, store);
     }
 
     // Check Mode: Multi-City vs Single-Leg
@@ -207,110 +92,5 @@ export class RecommendService {
         );
       return recommendation;
     }
-  }
-
-  /**
-   * Helper to parse cities and destination dynamically from requestText.
-   */
-  private inferRouteFromText(
-    requestText: string,
-    homeAirport: string,
-    store: DataStore,
-  ): { destination?: string; cities?: string[] } {
-    const text = requestText.toLowerCase();
-
-    interface FoundEntity {
-      code: string;
-      index: number;
-    }
-    const found: FoundEntity[] = [];
-
-    // 1. Scan for IATA codes (excluding home airport)
-    const matches = requestText.match(/\b([A-Z]{3})\b/g);
-    if (matches) {
-      for (const match of matches) {
-        if (store.airports.has(match) && match !== homeAirport) {
-          const index = requestText.indexOf(match);
-          if (!found.some((f) => f.code === match)) {
-            found.push({ code: match, index });
-          }
-        }
-      }
-    }
-
-    // 2. Scan for city names (excluding home airport)
-    for (const [code, info] of store.airports.entries()) {
-      if (code === homeAirport) continue;
-      const cityLower = info.city.toLowerCase();
-      if (text.includes(cityLower)) {
-        const index = text.indexOf(cityLower);
-        if (!found.some((f) => f.code === code)) {
-          found.push({ code, index });
-        }
-      }
-    }
-
-    // Sort by appearance in text
-    found.sort((a, b) => a.index - b.index);
-
-    const codes = found.map((f) => f.code);
-
-    if (codes.length >= 2) {
-      return { cities: codes };
-    } else if (codes.length === 1) {
-      return { destination: codes[0] };
-    }
-
-    return {};
-  }
-
-  /**
-   * Parses stay durations (in nights/days) from trip description text.
-   */
-  private parseStayDurationsFromText(
-    requestText: string,
-    store: DataStore,
-  ): Record<string, number> {
-    const stayDurations: Record<string, number> = {};
-    const textLower = requestText.toLowerCase();
-
-    for (const [code, info] of store.airports.entries()) {
-      const cityLower = info.city.toLowerCase();
-
-      // "X nights/days in [city]"
-      const regex1 = new RegExp(
-        `(\\d+)\\s*(?:nights?|days?)\\s+(?:in\\s+)?${cityLower}\\b`,
-        'i',
-      );
-      const match1 = textLower.match(regex1);
-      if (match1) {
-        stayDurations[code] = parseInt(match1[1], 10);
-        continue;
-      }
-
-      // "stay in [city] for X nights/days"
-      const regex2 = new RegExp(
-        `stay\\s+(?:in\\s+)?${cityLower}\\s+(?:for\\s+)?(\\d+)\\s*(?:nights?|days?)`,
-        'i',
-      );
-      const match2 = textLower.match(regex2);
-      if (match2) {
-        stayDurations[code] = parseInt(match2[1], 10);
-        continue;
-      }
-
-      // "[city] for X nights/days"
-      const regex3 = new RegExp(
-        `\\b${cityLower}\\s+(?:for\\s+)?(\\d+)\\s*(?:nights?|days?)`,
-        'i',
-      );
-      const match3 = textLower.match(regex3);
-      if (match3) {
-        stayDurations[code] = parseInt(match3[1], 10);
-        continue;
-      }
-    }
-
-    return stayDurations;
   }
 }
