@@ -1,17 +1,17 @@
-import { PrismaClient } from "@prisma/client";
-import fs from "fs";
-import path from "path";
-import Papa from "papaparse";
-import { coerceUserRow, coerceFlightRow } from "../src/saarathi/data";
+import { PrismaClient } from '@prisma/client';
+import fs from 'fs';
+import path from 'path';
+import Papa from 'papaparse';
+import { coerceUserRow, coerceFlightRow } from '../src/saarathi/data';
 
 const prisma = new PrismaClient();
 
 function resolveDataPath(filename: string): string {
   const paths = [
-    path.join(process.cwd(), "../data", filename),
-    path.join(process.cwd(), "data", filename),
-    path.join(process.cwd(), "saarathi-backend/data", filename),
-    path.join(__dirname, "../../data", filename),
+    path.join(process.cwd(), '../data', filename),
+    path.join(process.cwd(), 'data', filename),
+    path.join(process.cwd(), 'saarathi-backend/data', filename),
+    path.join(__dirname, '../../data', filename),
   ];
   for (const p of paths) {
     if (fs.existsSync(p)) {
@@ -22,21 +22,24 @@ function resolveDataPath(filename: string): string {
 }
 
 async function main() {
-  console.log("Starting database seed...");
+  console.log('Starting database seed...');
 
   // 1. Clear database
   await prisma.user.deleteMany();
   await prisma.flight.deleteMany();
 
   // 2. Seed Users
-  const userPath = resolveDataPath("user_data.csv");
+  const userPath = resolveDataPath('user_data.csv');
   console.log(`Reading users from ${userPath}`);
-  const userCsv = fs.readFileSync(userPath, "utf-8");
-  const userParseResult = Papa.parse<Record<string, unknown>>(userCsv, { header: true, skipEmptyLines: true });
-  
+  const userCsv = fs.readFileSync(userPath, 'utf-8');
+  const userParseResult = Papa.parse<Record<string, unknown>>(userCsv, {
+    header: true,
+    skipEmptyLines: true,
+  });
+
   const userRows = userParseResult.data.map((row) => coerceUserRow(row));
   console.log(`Parsed ${userRows.length} users. Seeding...`);
-  
+
   for (const user of userRows) {
     if (user.user_id) {
       await prisma.user.create({
@@ -64,11 +67,14 @@ async function main() {
   }
 
   // 3. Seed Flights
-  const flightPath = resolveDataPath("flights_data.csv");
+  const flightPath = resolveDataPath('flights_data.csv');
   console.log(`Reading flights from ${flightPath}`);
-  const flightCsv = fs.readFileSync(flightPath, "utf-8");
-  const flightParseResult = Papa.parse<Record<string, unknown>>(flightCsv, { header: true, skipEmptyLines: true });
-  
+  const flightCsv = fs.readFileSync(flightPath, 'utf-8');
+  const flightParseResult = Papa.parse<Record<string, unknown>>(flightCsv, {
+    header: true,
+    skipEmptyLines: true,
+  });
+
   const flightRows = flightParseResult.data.map((row) => coerceFlightRow(row));
   console.log(`Parsed ${flightRows.length} flights. Seeding in chunks...`);
 
@@ -108,10 +114,12 @@ async function main() {
     await prisma.flight.createMany({
       data: dataToInsert,
     });
-    console.log(`Seeded flights ${i} to ${Math.min(i + chunkSize, flightRows.length)}`);
+    console.log(
+      `Seeded flights ${i} to ${Math.min(i + chunkSize, flightRows.length)}`,
+    );
   }
 
-  console.log("Database seed complete!");
+  console.log('Database seed complete!');
 }
 
 main()

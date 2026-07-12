@@ -23,10 +23,10 @@ function asString(v: unknown): string {
 
 function resolveDataPath(filename: string): string {
   const paths = [
-    path.join(process.cwd(), '../data', filename),
     path.join(process.cwd(), 'data', filename),
-    path.join(__dirname, '../../data', filename),
     path.join(__dirname, '../data', filename),
+    path.join(__dirname, '../../data', filename),
+    path.join(process.cwd(), '../data', filename),
     path.join(__dirname, '../../../data', filename),
   ];
   for (const p of paths) {
