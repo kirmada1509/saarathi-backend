@@ -155,17 +155,30 @@ function countHits(text: string, patterns: RegExp[]): number {
 
 export async function inferPreferences(
   user: UserRow,
+  requestText?: string,
 ): Promise<InferredPreference> {
   // Try to initialize embedding model (non-blocking if already loaded)
   if (!extractor && !modelLoading) {
     await initEmbeddingModel();
   }
 
-  const rawHistory = user.raw_history ?? '';
-  const phrases = rawHistory
+  const phrases: { text: string; isRequest: boolean }[] = (user.raw_history ?? '')
     .split(' | ')
     .map((p) => p.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .map((p) => ({ text: p, isRequest: false }));
+
+  if (requestText) {
+    // Split requestText by typical sentence boundaries, clauses, or logical delimiters
+    const requestPhrases = requestText
+      .split(/[.!?|;]|\band\b|\bbut\b/i)
+      .map((p) => p.trim())
+      .filter(Boolean);
+    for (const rp of requestPhrases) {
+      phrases.push({ text: rp, isRequest: true });
+    }
+  }
+
   const evidence: EvidenceItem[] = [];
 
   let directWeight = DIRECT_PREF_MAP[user.direct_preference] ?? 0.3;
@@ -188,14 +201,17 @@ export async function inferPreferences(
   let avoidRedeyeHits = 0;
   let redeyeOkHits = 0;
 
-  for (const phrase of phrases) {
+  for (const phraseObj of phrases) {
+    const phrase = phraseObj.text;
+    const isRequest = phraseObj.isRequest;
+    const sourceLabel = isRequest ? 'trip_description' : 'raw_history';
     let matched = false;
 
     if (countHits(phrase, DIRECT_BOOST) > 0) {
       directHits++;
       evidence.push({
-        text: `raw_history: "${phrase}" signals direct-flight preference`,
-        source: 'raw_history',
+        text: `${sourceLabel}: "${phrase}" signals direct-flight preference`,
+        source: sourceLabel,
         dimension: 'direct',
       });
       matched = true;
@@ -203,8 +219,8 @@ export async function inferPreferences(
     if (countHits(phrase, COST_BOOST) > 0) {
       costHits++;
       evidence.push({
-        text: `raw_history: "${phrase}" signals price sensitivity`,
-        source: 'raw_history',
+        text: `${sourceLabel}: "${phrase}" signals price sensitivity`,
+        source: sourceLabel,
         dimension: 'cost',
       });
       matched = true;
@@ -212,8 +228,8 @@ export async function inferPreferences(
     if (countHits(phrase, CONVENIENCE_BOOST) > 0) {
       convHits++;
       evidence.push({
-        text: `raw_history: "${phrase}" signals comfort-over-cost`,
-        source: 'raw_history',
+        text: `${sourceLabel}: "${phrase}" signals comfort-over-cost`,
+        source: sourceLabel,
         dimension: 'convenience',
       });
       matched = true;
@@ -221,8 +237,8 @@ export async function inferPreferences(
     if (countHits(phrase, REDEYE_AVOID) > 0) {
       avoidRedeyeHits++;
       evidence.push({
-        text: `raw_history: "${phrase}" signals redeye avoidance`,
-        source: 'raw_history',
+        text: `${sourceLabel}: "${phrase}" signals redeye avoidance`,
+        source: sourceLabel,
         dimension: 'redeye',
       });
       matched = true;
@@ -230,8 +246,8 @@ export async function inferPreferences(
     if (countHits(phrase, REDEYE_OK) > 0) {
       redeyeOkHits++;
       evidence.push({
-        text: `raw_history: "${phrase}" signals redeye acceptance`,
-        source: 'raw_history',
+        text: `${sourceLabel}: "${phrase}" signals redeye acceptance`,
+        source: sourceLabel,
         dimension: 'redeye',
       });
       matched = true;
@@ -243,9 +259,12 @@ export async function inferPreferences(
       if (embedMatch) {
         evidence.push({
           text: `embedding similarity: "${phrase}" matches archetype "${embedMatch.archetype}" (${Math.round(embedMatch.similarity * 100)}% similarity)`,
-          source: 'embedding',
+          source: isRequest ? 'trip_description' : 'embedding',
           dimension: embedMatch.dimension as
-            'direct' | 'cost' | 'convenience' | 'redeye',
+            | 'direct'
+            | 'cost'
+            | 'convenience'
+            | 'redeye',
         });
 
         if (embedMatch.dimension === 'direct') directHits++;

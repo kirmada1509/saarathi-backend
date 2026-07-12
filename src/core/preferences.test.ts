@@ -77,4 +77,28 @@ describe('Preference Inference Module', () => {
       expect(pref.avoid_redeye).toBe(true);
     }
   });
+
+  it('should parse requestText (Trip description) for direct and cost boost signals', async () => {
+    const user = {
+      ...baseUser,
+      raw_history: '',
+    };
+    const pref = await inferPreferences(
+      user,
+      'I prefer business class and hate connections. Show me the cheapest option possible.',
+    );
+
+    // Check requestText signals are parsed:
+    // "hate connections" -> direct boost
+    // "cheapest" -> cost boost
+    expect(pref.direct_weight).toBeGreaterThan(0.55); // boosted from 0.55
+    expect(pref.cost_weight).toBeGreaterThan(0.5); // boosted from 0.5
+
+    const requestEvidence = pref.evidence.filter(
+      (e) => e.source === 'trip_description',
+    );
+    expect(requestEvidence.length).toBeGreaterThanOrEqual(2);
+    expect(requestEvidence.some((e) => e.dimension === 'direct')).toBe(true);
+    expect(requestEvidence.some((e) => e.dimension === 'cost')).toBe(true);
+  });
 });

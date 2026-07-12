@@ -49,7 +49,7 @@ export interface FlightRow {
 
 export interface EvidenceItem {
   text: string; // human-readable, rendered verbatim in zone 2
-  source: 'structured' | 'raw_history' | 'embedding';
+  source: 'structured' | 'raw_history' | 'embedding' | 'trip_description';
   dimension: 'direct' | 'cost' | 'convenience' | 'redeye' | 'airline' | 'cabin';
 }
 

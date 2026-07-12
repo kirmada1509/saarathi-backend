@@ -58,6 +58,7 @@ export class RecommendSingleLegService {
     let explanation = '';
 
     if (ranked.length === 0) {
+      // no flights matched even after relaxation
       const bindingStep = this.findBindingConstraint(filterTrace.steps);
       const staticFallback =
         `No flights matched your hard constraints (layovers, dates, redeyes). ` +
