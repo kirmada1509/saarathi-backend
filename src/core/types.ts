@@ -90,6 +90,7 @@ export interface MultiCityLeg {
   from: string;
   to: string;
   flight: ScoredFlight;
+  minStayDays?: number;
 }
 
 export interface MultiCityItinerary {

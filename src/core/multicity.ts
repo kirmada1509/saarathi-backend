@@ -24,19 +24,29 @@ function permute<T>(arr: T[]): T[][] {
   return result;
 }
 
-// Check if leg2 departs at least 1 hour (60 minutes) after leg1 arrives.
-// For multi-city tourism routes, legs are typically on different days;
-// the 60-minute floor prevents same-flight double-counting while remaining lenient.
-function satisfiesTemporalSanity(leg1: FlightRow, leg2: FlightRow): boolean {
+// Check if leg2 departs at least 1 hour (60 minutes) after leg1 arrives, or satisfies stay duration requirement.
+// For multi-city tourism routes, legs are typically on different days.
+// `stayCity` is the city being departed FROM on this leg (i.e. route[legIdx], where the traveler has been staying).
+function satisfiesStayDuration(
+  leg1: FlightRow,
+  leg2: FlightRow,
+  stayCity: string,
+  stayDurations?: Record<string, number>,
+): boolean {
   const arrival = new Date(leg1.arrival_utc).getTime();
   const departure = new Date(leg2.departure_utc).getTime();
   const diffMinutes = (departure - arrival) / (1000 * 60);
-  return diffMinutes >= 60; // at least 1 hour between arrival and next departure
+
+  const requiredNights = stayDurations?.[stayCity] ?? 0;
+  const requiredMinutes = requiredNights > 0 ? requiredNights * 24 * 60 : 60;
+
+  return diffMinutes >= requiredMinutes;
 }
 
 export function optimizeRoute(
   cities: string[],
   pref: InferredPreference,
+  stayDurations?: Record<string, number>,
 ): {
   itinerary: MultiCityItinerary;
   alternatives: Alternative[];
@@ -98,7 +108,10 @@ export function optimizeRoute(
         null;
 
       for (const f of ranked) {
-        if (prevFlight && !satisfiesTemporalSanity(prevFlight, f)) {
+        if (
+          prevFlight &&
+          !satisfiesStayDuration(prevFlight, f, from, stayDurations)
+        ) {
           continue;
         }
 
@@ -114,7 +127,15 @@ export function optimizeRoute(
           const currentScoreSum = f.score + sub.scoreSum;
           if (!bestSubResult || currentScoreSum > bestSubResult.scoreSum) {
             bestSubResult = {
-              legs: [{ from, to, flight: f }, ...sub.legs],
+              legs: [
+                {
+                  from,
+                  to,
+                  flight: f,
+                  minStayDays: stayDurations?.[from],
+                },
+                ...sub.legs,
+              ],
               scoreSum: currentScoreSum,
             };
             if (legIdx === 0) {

@@ -39,4 +39,35 @@ describe('Multi-city Optimizer Module', () => {
     );
     console.log('[Multi-City Test] Counterfactual label:', counterfactualLabel);
   });
+
+  it('should enforce stayDurations constraints and push departure dates out', async () => {
+    const store = getStore();
+    const u04 = store.users.get('U04')!;
+    const pref = await inferPreferences(u04);
+
+    const cities = ['LHR', 'CDG'];
+    // Enforce 4 days stay in LHR and 3 days stay in CDG
+    const stayDurations = { LHR: 4, CDG: 3 };
+    const result = optimizeRoute(cities, pref, stayDurations);
+
+    expect(result).not.toBeNull();
+    const { itinerary } = result!;
+
+    expect(itinerary.legs.length).toBe(3);
+
+    for (let i = 0; i < itinerary.legs.length - 1; i++) {
+      const leg = itinerary.legs[i];
+      const nextLeg = itinerary.legs[i + 1];
+      const arrival = new Date(leg.flight.arrival_utc).getTime();
+      const departure = new Date(nextLeg.flight.departure_utc).getTime();
+      const gapDays = (departure - arrival) / (1000 * 60 * 60 * 24);
+
+      const city = leg.to; // The city we stayed in between leg i and i+1
+      const requiredStay =
+        stayDurations[city as keyof typeof stayDurations] ?? 0;
+      if (requiredStay > 0) {
+        expect(gapDays).toBeGreaterThanOrEqual(requiredStay);
+      }
+    }
+  });
 });

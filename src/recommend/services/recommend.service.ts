@@ -19,6 +19,7 @@ export class RecommendService {
     origin?: string;
     destination?: string;
     cities?: string[];
+    stayDurations?: Record<string, number>;
     perturbations?: Perturbation[];
   }): Promise<RecommendResponse> {
     const { userId, requestText, perturbations = [] } = data;
@@ -55,6 +56,14 @@ export class RecommendService {
       resolvedCities = inferred.cities;
     }
 
+    let resolvedStayDurations = data.stayDurations;
+    if (!resolvedStayDurations && resolvedCities && resolvedCities.length > 0) {
+      resolvedStayDurations = this.parseStayDurationsFromText(
+        requestText,
+        store,
+      );
+    }
+
     // Check Mode: Multi-City vs Single-Leg
     if (resolvedCities && resolvedCities.length > 0) {
       const recommendation: RecommendResponse =
@@ -64,6 +73,7 @@ export class RecommendService {
           resolvedCities,
           perturbedPref,
           perturbations,
+          resolvedStayDurations,
         );
       return recommendation;
     } else {
@@ -135,5 +145,55 @@ export class RecommendService {
     }
 
     return {};
+  }
+
+  /**
+   * Parses stay durations (in nights/days) from trip description text.
+   */
+  private parseStayDurationsFromText(
+    requestText: string,
+    store: DataStore,
+  ): Record<string, number> {
+    const stayDurations: Record<string, number> = {};
+    const textLower = requestText.toLowerCase();
+
+    for (const [code, info] of store.airports.entries()) {
+      const cityLower = info.city.toLowerCase();
+
+      // "X nights/days in [city]"
+      const regex1 = new RegExp(
+        `(\\d+)\\s*(?:nights?|days?)\\s+(?:in\\s+)?${cityLower}\\b`,
+        'i',
+      );
+      const match1 = textLower.match(regex1);
+      if (match1) {
+        stayDurations[code] = parseInt(match1[1], 10);
+        continue;
+      }
+
+      // "stay in [city] for X nights/days"
+      const regex2 = new RegExp(
+        `stay\\s+(?:in\\s+)?${cityLower}\\s+(?:for\\s+)?(\\d+)\\s*(?:nights?|days?)`,
+        'i',
+      );
+      const match2 = textLower.match(regex2);
+      if (match2) {
+        stayDurations[code] = parseInt(match2[1], 10);
+        continue;
+      }
+
+      // "[city] for X nights/days"
+      const regex3 = new RegExp(
+        `\\b${cityLower}\\s+(?:for\\s+)?(\\d+)\\s*(?:nights?|days?)`,
+        'i',
+      );
+      const match3 = textLower.match(regex3);
+      if (match3) {
+        stayDurations[code] = parseInt(match3[1], 10);
+        continue;
+      }
+    }
+
+    return stayDurations;
   }
 }

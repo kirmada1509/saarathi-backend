@@ -162,7 +162,9 @@ export async function inferPreferences(
     await initEmbeddingModel();
   }
 
-  const phrases: { text: string; isRequest: boolean }[] = (user.raw_history ?? '')
+  const phrases: { text: string; isRequest: boolean }[] = (
+    user.raw_history ?? ''
+  )
     .split(' | ')
     .map((p) => p.trim())
     .filter(Boolean)
@@ -261,10 +263,7 @@ export async function inferPreferences(
           text: `embedding similarity: "${phrase}" matches archetype "${embedMatch.archetype}" (${Math.round(embedMatch.similarity * 100)}% similarity)`,
           source: isRequest ? 'trip_description' : 'embedding',
           dimension: embedMatch.dimension as
-            | 'direct'
-            | 'cost'
-            | 'convenience'
-            | 'redeye',
+            'direct' | 'cost' | 'convenience' | 'redeye',
         });
 
         if (embedMatch.dimension === 'direct') directHits++;

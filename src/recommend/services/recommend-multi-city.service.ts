@@ -18,8 +18,9 @@ export class RecommendMultiCityService {
     cities: string[],
     perturbedPref: InferredPreference,
     perturbations: Perturbation[],
+    stayDurations?: Record<string, number>,
   ): Promise<RecommendResponse> {
-    const mcResult = optimizeRoute(cities, perturbedPref);
+    const mcResult = optimizeRoute(cities, perturbedPref, stayDurations);
 
     if (!mcResult) {
       throw new NotFoundException({
@@ -88,6 +89,7 @@ export class RecommendMultiCityService {
           from: l.from,
           to: l.to,
           flight_id: l.flight.flight_id,
+          minStayDays: l.minStayDays,
         })),
       },
       {

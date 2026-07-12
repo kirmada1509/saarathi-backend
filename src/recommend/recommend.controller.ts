@@ -21,6 +21,7 @@ const RecommendRequestSchema = z.object({
   origin: z.string().optional(),
   destination: z.string().optional(),
   cities: z.array(z.string()).optional(),
+  stayDurations: z.record(z.string(), z.number()).optional(),
   perturbations: z.array(PerturbationSchema).optional(),
 });
 
