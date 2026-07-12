@@ -40,24 +40,28 @@ export class RecommendService {
 
     // Check Mode: Multi-City vs Single-Leg
     if (data.cities && data.cities.length > 0) {
-      return this.multiCityService.getRecommendation(
-        userId,
-        requestText,
-        data.cities,
-        perturbedPref,
-        perturbations,
-      );
+      const recommendation: RecommendResponse =
+        await this.multiCityService.getRecommendation(
+          userId,
+          requestText,
+          data.cities,
+          perturbedPref,
+          perturbations,
+        );
+      return recommendation;
     } else {
-      return this.singleLegService.getRecommendation(
-        userId,
-        requestText,
-        user,
-        basePref,
-        perturbedPref,
-        perturbations,
-        data.origin,
-        data.destination,
-      );
+      const recommendation: RecommendResponse =
+        await this.singleLegService.getRecommendation(
+          userId,
+          requestText,
+          user,
+          basePref,
+          perturbedPref,
+          perturbations,
+          data.origin,
+          data.destination,
+        );
+      return recommendation;
     }
   }
 }
