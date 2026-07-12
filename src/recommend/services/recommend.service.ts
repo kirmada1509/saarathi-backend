@@ -28,10 +28,14 @@ export class RecommendService {
     if (llmParsed) {
       const placeNames: Record<string, string> = {};
       if (llmParsed.destination && store.airports.has(llmParsed.destination)) {
-        placeNames[llmParsed.destination] = store.airports.get(llmParsed.destination)!.city;
+        placeNames[llmParsed.destination] = store.airports.get(
+          llmParsed.destination,
+        )!.city;
       }
       if (llmParsed.origin && store.airports.has(llmParsed.origin)) {
-        placeNames[llmParsed.origin] = store.airports.get(llmParsed.origin)!.city;
+        placeNames[llmParsed.origin] = store.airports.get(
+          llmParsed.origin,
+        )!.city;
       }
       if (llmParsed.cities) {
         llmParsed.cities.forEach((city) => {
@@ -76,7 +80,9 @@ export class RecommendService {
     );
     const placeNames: Record<string, string> = {};
     if (route.destination && store.airports.has(route.destination)) {
-      placeNames[route.destination] = store.airports.get(route.destination)!.city;
+      placeNames[route.destination] = store.airports.get(
+        route.destination,
+      )!.city;
     }
     if (route.cities) {
       route.cities.forEach((city) => {

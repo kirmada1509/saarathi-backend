@@ -31,10 +31,12 @@ export class RecommendController {
 
   @Post('parse-route')
   async parseRoute(@Body() body: any) {
-    const parsed = z.object({
-      userId: z.string(),
-      requestText: z.string(),
-    }).safeParse(body);
+    const parsed = z
+      .object({
+        userId: z.string(),
+        requestText: z.string(),
+      })
+      .safeParse(body);
 
     if (!parsed.success) {
       throw new BadRequestException({
@@ -43,7 +45,10 @@ export class RecommendController {
       });
     }
 
-    return this.recommendService.parseRouteFromRequest(parsed.data.userId, parsed.data.requestText);
+    return this.recommendService.parseRouteFromRequest(
+      parsed.data.userId,
+      parsed.data.requestText,
+    );
   }
 
   @Post()

@@ -10,6 +10,14 @@ export interface ParsedRoute {
   stayDurations: Record<string, number> | null;
 }
 
+/** Shape we expect back from the LLM JSON blob */
+interface LLMRawResult {
+  origin?: string | null;
+  destination?: string | null;
+  cities?: unknown[] | null;
+  stayDurations?: Record<string, unknown> | null;
+}
+
 const cache = new Map<string, ParsedRoute>();
 
 const ROUTE_PROMPT = ChatPromptTemplate.fromTemplate(`
@@ -62,47 +70,53 @@ export async function parseRouteWithLLM(
 
     let jsonText = responseText.trim();
     if (jsonText.includes('{')) {
-      jsonText = jsonText.substring(jsonText.indexOf('{'), jsonText.lastIndexOf('}') + 1);
+      jsonText = jsonText.substring(
+        jsonText.indexOf('{'),
+        jsonText.lastIndexOf('}') + 1,
+      );
     }
 
-    const parsed = JSON.parse(jsonText);
+    // Cast to our known shape — the LLM may return unexpected values so every
+    // field access below guards against that explicitly with typeof checks.
+    const parsed = JSON.parse(jsonText) as LLMRawResult;
 
     // Validate origin and destination codes
-    if (parsed.origin && !store.airports.has(parsed.origin)) {
-      parsed.origin = null;
-    }
-    if (parsed.destination && !store.airports.has(parsed.destination)) {
-      parsed.destination = null;
-    }
+    const rawOrigin = typeof parsed.origin === 'string' ? parsed.origin : null;
+    const rawDest =
+      typeof parsed.destination === 'string' ? parsed.destination : null;
+
+    const origin =
+      rawOrigin && store.airports.has(rawOrigin) ? rawOrigin : null;
+    const destination = rawDest && store.airports.has(rawDest) ? rawDest : null;
 
     // Validate multi-city list
-    if (parsed.cities && Array.isArray(parsed.cities)) {
-      parsed.cities = parsed.cities.filter((code: string) => store.airports.has(code));
-      if (parsed.cities.length < 2) {
-        parsed.cities = null;
-      }
-    } else {
-      parsed.cities = null;
+    let cities: string[] | null = null;
+    if (Array.isArray(parsed.cities)) {
+      const validCities = parsed.cities
+        .filter((c): c is string => typeof c === 'string')
+        .filter((code) => store.airports.has(code));
+      cities = validCities.length >= 2 ? validCities : null;
     }
 
     // Clean up stay durations
-    if (parsed.stayDurations) {
+    let stayDurations: Record<string, number> | null = null;
+    if (parsed.stayDurations && typeof parsed.stayDurations === 'object') {
       const validatedStays: Record<string, number> = {};
       for (const [code, val] of Object.entries(parsed.stayDurations)) {
         if (store.airports.has(code)) {
-          validatedStays[code] = typeof val === 'number' ? val : parseInt(val as string, 10) || 2;
+          validatedStays[code] =
+            typeof val === 'number' ? val : parseInt(String(val), 10) || 2;
         }
       }
-      parsed.stayDurations = Object.keys(validatedStays).length > 0 ? validatedStays : null;
-    } else {
-      parsed.stayDurations = null;
+      stayDurations =
+        Object.keys(validatedStays).length > 0 ? validatedStays : null;
     }
 
     const result: ParsedRoute = {
-      origin: parsed.origin || null,
-      destination: parsed.destination || null,
-      cities: parsed.cities || null,
-      stayDurations: parsed.stayDurations || null,
+      origin,
+      destination,
+      cities,
+      stayDurations,
     };
 
     cache.set(cacheKey, result);
