@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { getStore } from '../core/data';
+import { getStore, DataStore } from '../core/data';
 import { inferPreferences } from '../core/preferences';
 import { filterAndRank, selectAlternatives } from '../core/ranking';
 import {
@@ -19,6 +19,8 @@ import {
   Alternative,
   Counterfactual,
   Confidence,
+  Perturbation,
+  UserRow,
 } from '../core/types';
 
 @Injectable()
@@ -29,7 +31,7 @@ export class RecommendService {
     origin?: string;
     destination?: string;
     cities?: string[];
-    perturbations?: any[];
+    perturbations?: Perturbation[];
   }): Promise<RecommendResponse> {
     const { userId, requestText, perturbations = [] } = data;
     const store = getStore();
@@ -79,7 +81,7 @@ export class RecommendService {
     requestText: string,
     cities: string[],
     perturbedPref: InferredPreference,
-    perturbations: any[],
+    perturbations: Perturbation[],
   ): Promise<RecommendResponse> {
     const mcResult = optimizeRoute(cities, perturbedPref);
 
@@ -90,8 +92,7 @@ export class RecommendService {
       });
     }
 
-    const { itinerary, alternatives, counterfactualLabel, scoreGap } =
-      mcResult;
+    const { itinerary, alternatives, counterfactualLabel, scoreGap } = mcResult;
 
     // Multi-city mock ScoredFlight verdict (first leg flight anchor)
     const verdict = itinerary.legs[0].flight;
@@ -192,10 +193,10 @@ export class RecommendService {
   private async handleSingleLegRecommendation(
     userId: string,
     requestText: string,
-    user: any,
+    user: UserRow,
     basePref: InferredPreference,
     perturbedPref: InferredPreference,
-    perturbations: any[],
+    perturbations: Perturbation[],
     explicitOrigin?: string,
     explicitDestination?: string,
   ): Promise<RecommendResponse> {
@@ -307,7 +308,7 @@ export class RecommendService {
   private resolveDestination(
     requestText: string,
     homeAirport: string,
-    store: any,
+    store: DataStore,
     explicitDestination?: string,
   ): string {
     let destination = explicitDestination;
@@ -356,7 +357,7 @@ export class RecommendService {
     opts: {
       origin: string;
       destination: string;
-      perturbations: any[];
+      perturbations: Perturbation[];
       preferredDays: string[];
     },
   ): {
@@ -464,7 +465,7 @@ export class RecommendService {
     userId: string,
     requestText: string,
     destination: string,
-    perturbations: any[],
+    perturbations: Perturbation[],
     perturbedPref: InferredPreference,
     filterTrace: FilterTrace,
     ranked: ScoredFlight[],
