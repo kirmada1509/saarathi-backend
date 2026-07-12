@@ -21,7 +21,7 @@ import {
   Alternative,
   Counterfactual,
   Confidence,
-} from '../core/types';
+} from '../saarathi/types';
 
 // ─── Shared types ───────────────────────────────────────────────────────────
 

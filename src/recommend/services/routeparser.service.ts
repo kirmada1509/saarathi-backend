@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { getStore, DataStore } from '../../core/data';
+import { getStore, DataStore } from '../../saarathi/data';
 import { CortexService } from '../../cortex/cortex.service';
 
 export interface ParsedRouteFromRequest {

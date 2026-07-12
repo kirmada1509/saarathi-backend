@@ -2,7 +2,7 @@ import { Module, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from './prisma.service';
 import { UsersModule } from './users/users.module';
 import { RecommendModule } from './recommend/recommend.module';
-import { initializeStoreFromDb } from './core/data';
+import { initializeStoreFromDb } from './saarathi/data';
 
 @Module({
   imports: [UsersModule, RecommendModule],

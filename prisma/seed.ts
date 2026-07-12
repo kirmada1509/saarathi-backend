@@ -2,7 +2,7 @@ import { PrismaClient } from "@prisma/client";
 import fs from "fs";
 import path from "path";
 import Papa from "papaparse";
-import { coerceUserRow, coerceFlightRow } from "../src/core/data";
+import { coerceUserRow, coerceFlightRow } from "../src/saarathi/data";
 
 const prisma = new PrismaClient();
 

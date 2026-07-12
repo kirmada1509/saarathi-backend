@@ -1,8 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { getStore, DataStore } from '../../core/data';
-import { filterAndRank, selectAlternatives } from '../../core/ranking';
-import { computeCounterfactuals } from '../../core/counterfactuals';
-import { computeConfidence } from '../../core/confidence';
+import { getStore, DataStore } from '../../saarathi/data';
+import { filterAndRank, selectAlternatives } from '../../saarathi/ranking';
+import { computeCounterfactuals } from '../../saarathi/counterfactuals';
+import { computeConfidence } from '../../saarathi/confidence';
 import { CortexService } from '../../cortex/cortex.service';
 import {
   TraceStage,
@@ -16,7 +16,7 @@ import {
   Confidence,
   Perturbation,
   UserRow,
-} from '../../core/types';
+} from '../../saarathi/types';
 
 @Injectable()
 export class RecommendSingleLegService {
