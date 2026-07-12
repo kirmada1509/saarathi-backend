@@ -49,10 +49,16 @@ export class RecommendController {
       });
     }
 
-    return this.routeParserService.parseRouteFromRequest(
+    const warnings: string[] = [];
+    const result = await this.routeParserService.parseRouteFromRequest(
       parsed.data.userId,
       parsed.data.requestText,
+      warnings,
     );
+    return {
+      ...result,
+      warnings: warnings.length > 0 ? warnings : undefined,
+    };
   }
 
   @Post()

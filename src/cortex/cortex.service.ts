@@ -21,6 +21,8 @@ import {
   Alternative,
   Counterfactual,
   Confidence,
+  UserRow,
+  EvidenceItem,
 } from '../saarathi/types';
 
 // ─── Shared types ───────────────────────────────────────────────────────────
@@ -42,24 +44,31 @@ interface LLMRouteRaw {
 
 // ─── Prompt templates ────────────────────────────────────────────────────────
 
-const EXPLAIN_PROMPT =
-  ChatPromptTemplate.fromTemplate(`You are Saarathi, an expert travel strategist AI. A traveler ({userId}) asked: "{requestText}"
+const EXPLAIN_PROMPT = ChatPromptTemplate.fromTemplate(`
+You are Saarathi, a premium travel strategist AI concierge. 
+Explain to traveler {userId} why the #1 ranked flight is the absolute best match for their request: "{requestText}".
 
-Here is the structured and behavioral evidence we inferred for their travel preferences:
+Input Data:
+1. Traveler Preference Signals (Evidence):
 {evidence}
 
-We evaluated all candidate flights and ranked them. Here are the top 3 options:
+2. Scored & Ranked Flight Choices (Option #1 is our recommendation):
 {options}
 
-Here is the opportunity cost/alternatives analysis (what they are giving up):
+3. Trade-offs (Alternatives compared to Option #1):
 {alternatives}
 
-Here is the decision boundary analysis (what would change our recommendation):
+4. Decision Boundaries (What would change this recommendation):
 {counterfactuals}
 
-Our recommendation has a match score of {matchPct}% with a confidence tier of "{confidenceTier}".
+Recommendation Match Score: {matchPct}%
+Confidence Tier: {confidenceTier}
 
-In 3-4 sentences, explain why the #1 ranked flight is the absolute best match for this traveler. You must justify this recommendation by directly citing the preferences evidence, the trade-offs they are making, and the decision boundary. Do not invent any facts or reasoning that isn't grounded in the provided data. Be extremely direct and concise.`);
+Instructions:
+1. You MUST explain why Option #1 (the top-ranked flight) is the best choice. Do not recommend or suggest any other flight as the winner. Do not contradict the ranking.
+2. Write in a premium, warm, traveler-centric, and natural tone. Do NOT include raw database variables, technical keys, or developer symbols like "direct_weight", "preferred_cabin", "cost_weight", "->", or parenthetical code variables. Translate them into plain English (e.g. write "price sensitivity is medium" or "strong preference for direct flights").
+3. Keep the response to 3-4 concise, highly polished sentences. Focus on the trade-offs they are avoiding and why this match perfectly serves their comfort or budget preferences.
+`);
 
 const ROUTE_PROMPT = ChatPromptTemplate.fromTemplate(`
 Extract the flight route from this travel request.
@@ -81,6 +90,49 @@ Rules:
 
 Respond with ONLY this JSON, no explanation:
 {{"origin": "XXX" | null, "destination": "XXX" | null, "cities": ["XXX", "YYY"] | null, "stayDurations": {{"XXX": 2}} | null}}
+`);
+
+const PREFS_PROMPT = ChatPromptTemplate.fromTemplate(`
+Analyze the traveler profile and search prompt to infer travel preference weights.
+The traveler has the following profile details:
+- home_airport: {homeAirport}
+- direct_preference: {directPreference} (structured setting)
+- price_sensitivity: {priceSensitivity} (structured setting)
+- preferred_cabin: {preferredCabin}
+- preferred_airlines: {preferredAirlines}
+- raw_history: "{rawHistory}" (unstructured travel notes/history)
+
+Search Prompt: "{requestText}"
+
+Rules for weight values (0.0 to 1.0):
+1. direct_weight: 
+   - Start from base value: strong=0.9, moderate=0.55, none=0.15.
+   - Adjust +0.1 per phrase in search prompt or raw_history signaling a preference for direct flights (e.g. "hate connections", "avoid layovers"). Max 1.0.
+2. cost_weight:
+   - Start from base value: high=0.85, medium=0.5, low=0.2, none=0.05.
+   - Adjust +0.1 per phrase signaling price sensitivity (e.g. "cheapest", "tight budget", "rock-bottom"). Max 1.0.
+3. convenience_weight:
+   - Start from base value: 1 - (cost_weight * 0.6).
+   - Adjust +0.15 per phrase signaling convenience/comfort (e.g. "comfort over cost", "lounge access"). Max 1.0.
+4. avoid_redeye:
+   - true if there are phrases like "redeye kills me", "avoid overnight" and no opposing phrases. Otherwise false.
+
+Evidence:
+You must return a list of evidence items, each matching the structure:
+{{"text": "reasoning text citing history/prompt", "source": "raw_history" | "trip_description", "dimension": "direct" | "cost" | "convenience" | "redeye" | "airline" | "cabin"}}
+Include evidence for structured profile configurations and any unstructured/trip description phrases you identify.
+
+Respond with ONLY this JSON, no explanation:
+{{
+  "direct_weight": 0.55,
+  "cost_weight": 0.5,
+  "convenience_weight": 0.7,
+  "avoid_redeye": false,
+  "evidence": [
+    {{"text": "structured: direct_preference=moderate -> direct_weight=0.55", "source": "structured", "dimension": "direct"}},
+    {{"text": "trip_description: 'hate connections' signals direct-flight preference", "source": "trip_description", "dimension": "direct"}}
+  ]
+}}
 `);
 
 // ─── Per-request cache for route parsing ────────────────────────────────────
@@ -131,15 +183,33 @@ export class CortexService {
     confidence: Confidence,
   ): string {
     const best = ranked[0];
-    const lastEvidence =
-      pref.evidence
-        .map((e) => e.text)
-        .slice(-2)
-        .join(', ') || 'structured profile data';
+
+    // Filter and clean up the evidence texts for a user-friendly message
+    const cleanEvidence = pref.evidence
+      .map((e) => {
+        // Strip out implementation details like -> direct_weight=...
+        return e.text
+          .replace(/\s*->\s*\w+_\w+=\d+(\.\d+)?/g, '')
+          .replace(/structured:\s*/gi, '')
+          .replace(/raw_history:\s*/gi, '')
+          .replace(/trip_description:\s*/gi, '')
+          .replace(/embedding similarity:\s*/gi, '')
+          .trim();
+      })
+      .filter(Boolean);
+
+    const evidenceStr = cleanEvidence.length > 0
+      ? `This recommendation is aligned with the traveler's preference profile, specifically: ${cleanEvidence.join(', ')}.`
+      : `This recommendation is based on their structured profile preferences.`;
+
+    const stopDesc = best.stops === 0 ? 'nonstop' : `${best.stops} stop(s)`;
+    const durationHrs = (best.duration_minutes / 60).toFixed(1);
+
     return (
-      `For ${userId}, the top pick is ${best.airline_name} (${best.stops} stop(s), ` +
-      `$${best.price.toFixed(0)}, ${(best.duration_minutes / 60).toFixed(1)}h) matching with ${confidence.matchPct}% score ` +
-      `(${confidence.tier} confidence), based on: ${lastEvidence}.`
+      `We recommend taking the ${best.airline_name} flight from ${best.origin} to ${best.destination}. ` +
+      `It is a ${stopDesc} flight priced at $${best.price.toFixed(0)} with a travel time of ${durationHrs} hours. ` +
+      `This option matches the traveler's preferences with a ${confidence.matchPct}% match score (${confidence.tier} confidence). ` +
+      `${evidenceStr}`
     );
   }
 
@@ -157,6 +227,7 @@ export class CortexService {
     alternatives: Alternative[],
     counterfactuals: Counterfactual[],
     confidence: Confidence,
+    warnings?: string[],
   ): Promise<string> {
     if (ranked.length === 0) {
       return "No flights matched this traveler's hard constraints for this route — try a different destination or relax the layover limit.";
@@ -164,6 +235,7 @@ export class CortexService {
 
     const model = this.buildGroqModel(0.4);
     if (!model) {
+      warnings?.push('Groq LLM is offline or GROQ_API_KEY is missing. Using local explanation fallback.');
       return this.explanationFallback(userId, pref, ranked, confidence);
     }
 
@@ -188,6 +260,7 @@ export class CortexService {
         '[CortexService] Explanation call failed, using fallback:',
         err,
       );
+      warnings?.push('Groq LLM rate-limited or API call failed. Using local explanation fallback.');
       return this.explanationFallback(userId, pref, ranked, confidence);
     }
   }
@@ -201,6 +274,7 @@ export class CortexService {
     requestText: string,
     homeAirport: string,
     knownAirports: Map<string, unknown>,
+    warnings?: string[],
   ): Promise<ParsedRoute | null> {
     const cacheKey = `${homeAirport}:${requestText.trim()}`;
     if (routeCache.has(cacheKey)) {
@@ -208,7 +282,10 @@ export class CortexService {
     }
 
     const model = this.buildGroqModel(0);
-    if (!model) return null;
+    if (!model) {
+      warnings?.push('Groq LLM is offline or GROQ_API_KEY is missing. Using local route parser fallback.');
+      return null;
+    }
 
     try {
       const knownCodes = [...knownAirports.keys()].join(', ');
@@ -271,6 +348,111 @@ export class CortexService {
       return result;
     } catch (err) {
       console.error('[CortexService] Route parse failed:', err);
+      warnings?.push('Groq LLM rate-limited or API call failed. Using local route parser fallback.');
+      return null;
+    }
+  }
+
+  /**
+   * Infers preferences using LLM, with fallback validation rules.
+   */
+  async inferPreferences(
+    user: UserRow,
+    requestText?: string,
+    warnings?: string[],
+  ): Promise<InferredPreference | null> {
+    const model = this.buildGroqModel(0);
+    if (!model) {
+      warnings?.push('Groq LLM is offline or GROQ_API_KEY is missing. Using local preferences fallback.');
+      return null;
+    }
+
+    try {
+      const preferredAirlines = (user.preferred_airlines ?? '')
+        .split(';')
+        .map((a) => a.trim())
+        .filter(Boolean);
+
+      const chain = PREFS_PROMPT.pipe(model).pipe(new StringOutputParser());
+      const responseText = await chain.invoke({
+        homeAirport: user.home_airport,
+        directPreference: user.direct_preference,
+        priceSensitivity: user.price_sensitivity,
+        preferredCabin: user.preferred_cabin,
+        preferredAirlines: preferredAirlines.join(', ') || 'None',
+        rawHistory: user.raw_history ?? '',
+        requestText: requestText ?? '',
+      });
+
+      let jsonText = responseText.trim();
+      if (jsonText.includes('{')) {
+        jsonText = jsonText.substring(
+          jsonText.indexOf('{'),
+          jsonText.lastIndexOf('}') + 1,
+        );
+      }
+
+      const raw = JSON.parse(jsonText);
+
+      const direct_weight = typeof raw.direct_weight === 'number' ? Math.round(raw.direct_weight * 100) / 100 : 0.3;
+      const cost_weight = typeof raw.cost_weight === 'number' ? Math.round(raw.cost_weight * 100) / 100 : 0.5;
+      const convenience_weight = typeof raw.convenience_weight === 'number' ? Math.round(raw.convenience_weight * 100) / 100 : 0.7;
+      const avoid_redeye = typeof raw.avoid_redeye === 'boolean' ? raw.avoid_redeye : false;
+
+      let evidence: EvidenceItem[] = [];
+      if (Array.isArray(raw.evidence)) {
+        evidence = raw.evidence.map((e: any) => ({
+          text: String(e.text || ''),
+          source: String(e.source || 'structured') as any,
+          dimension: String(e.dimension || 'direct') as any,
+        }));
+      }
+
+      if (!evidence.some((e) => e.source === 'structured' && e.dimension === 'direct')) {
+        evidence.unshift({
+          text: `structured: direct_preference=${user.direct_preference} -> direct_weight=${direct_weight}`,
+          source: 'structured',
+          dimension: 'direct',
+        });
+      }
+      if (!evidence.some((e) => e.source === 'structured' && e.dimension === 'cost')) {
+        evidence.unshift({
+          text: `structured: price_sensitivity=${user.price_sensitivity} -> cost_weight=${cost_weight}`,
+          source: 'structured',
+          dimension: 'cost',
+        });
+      }
+      if (preferredAirlines.length > 0 && !evidence.some((e) => e.dimension === 'airline')) {
+        evidence.push({
+          text: `structured: preferred airlines are ${preferredAirlines.join(', ')}`,
+          source: 'structured',
+          dimension: 'airline',
+        });
+      }
+      if (user.preferred_cabin && !evidence.some((e) => e.dimension === 'cabin')) {
+        evidence.push({
+          text: `structured: preferred cabin is ${user.preferred_cabin}`,
+          source: 'structured',
+          dimension: 'cabin',
+        });
+      }
+
+      return {
+        user_id: user.user_id,
+        direct_weight,
+        cost_weight,
+        convenience_weight,
+        max_layover_minutes: Number(user.max_layover_minutes) || 240,
+        date_flexibility_days: Number(user.date_flexibility_days) || 0,
+        avoid_redeye,
+        home_airport: user.home_airport,
+        preferred_airlines: preferredAirlines,
+        preferred_cabin: user.preferred_cabin,
+        evidence,
+      };
+    } catch (err) {
+      console.error('[CortexService] Preference parse failed:', err);
+      warnings?.push('Groq LLM rate-limited or API call failed. Using local preferences fallback.');
       return null;
     }
   }

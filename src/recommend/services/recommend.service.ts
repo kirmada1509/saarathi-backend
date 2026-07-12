@@ -4,8 +4,9 @@ import { inferPreferences } from '../../saarathi/preferences';
 import { applyPerturbations } from '../../saarathi/counterfactuals';
 import { RecommendSingleLegService } from './recommend-single-leg.service';
 import { RecommendMultiCityService } from './recommend-multi-city.service';
-import { RecommendResponse, Perturbation } from '../../saarathi/types';
+import { RecommendResponse, Perturbation, InferredPreference } from '../../saarathi/types';
 import { RouteParserService } from './routeparser.service';
+import { CortexService } from '../../cortex/cortex.service';
 
 @Injectable()
 export class RecommendService {
@@ -13,6 +14,7 @@ export class RecommendService {
     private readonly singleLegService: RecommendSingleLegService,
     private readonly multiCityService: RecommendMultiCityService,
     private readonly routeParserService: RouteParserService,
+    private readonly cortexService: CortexService,
   ) {}
 
   async getRecommendation(data: {
@@ -26,6 +28,7 @@ export class RecommendService {
   }): Promise<RecommendResponse> {
     const { userId, requestText, perturbations = [] } = data;
     const store = getStore();
+    const warnings: string[] = [];
 
     // 1. Get User Profile
     const user = store.users.get(userId);
@@ -35,8 +38,19 @@ export class RecommendService {
       });
     }
 
-    // 2. Infer Preferences (rules + embeddings + requestText)
-    const basePref = await inferPreferences(user, requestText);
+    // 2. Infer Preferences (LLM with regex/embeddings fallback)
+    let basePref: InferredPreference;
+    try {
+      const llmPref = await this.cortexService.inferPreferences(user, requestText, warnings);
+      if (llmPref) {
+        basePref = llmPref;
+      } else {
+        basePref = await inferPreferences(user, requestText);
+      }
+    } catch (err) {
+      console.warn('[RecommendService] LLM preference inference failed, falling back:', err);
+      basePref = await inferPreferences(user, requestText);
+    }
 
     // 3. Apply active perturbations to preferences
     const perturbedPref = applyPerturbations(basePref, perturbations);
@@ -76,8 +90,12 @@ export class RecommendService {
           perturbedPref,
           perturbations,
           resolvedStayDurations,
+          warnings,
         );
-      return recommendation;
+      return {
+        ...recommendation,
+        warnings: warnings.length > 0 ? warnings : undefined,
+      };
     } else {
       const recommendation: RecommendResponse =
         await this.singleLegService.getRecommendation(
@@ -89,8 +107,12 @@ export class RecommendService {
           perturbations,
           resolvedOrigin,
           resolvedDestination,
+          warnings,
         );
-      return recommendation;
+      return {
+        ...recommendation,
+        warnings: warnings.length > 0 ? warnings : undefined,
+      };
     }
   }
 }

@@ -30,6 +30,7 @@ export class RecommendSingleLegService {
     perturbations: Perturbation[],
     explicitOrigin?: string,
     explicitDestination?: string,
+    warnings?: string[],
   ): Promise<RecommendResponse> {
     const store = getStore();
 
@@ -98,6 +99,7 @@ export class RecommendSingleLegService {
         alternatives,
         counterfactuals,
         confidence,
+        warnings,
       );
     }
 

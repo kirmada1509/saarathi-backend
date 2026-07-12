@@ -19,6 +19,7 @@ export class RouteParserService {
   async parseRouteFromRequest(
     userId: string,
     requestText: string,
+    warnings?: string[],
   ): Promise<ParsedRouteFromRequest> {
     const store = getStore();
     const user = store.users.get(userId);
@@ -32,6 +33,7 @@ export class RouteParserService {
       requestText,
       user.home_airport,
       store.airports,
+      warnings,
     );
     if (llmParsed) {
       const placeNames: Record<string, string> = {};

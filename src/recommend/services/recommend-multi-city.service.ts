@@ -20,6 +20,7 @@ export class RecommendMultiCityService {
     perturbedPref: InferredPreference,
     perturbations: Perturbation[],
     stayDurations?: Record<string, number>,
+    warnings?: string[],
   ): Promise<RecommendResponse> {
     const mcResult = optimizeRoute(cities, perturbedPref, stayDurations);
 
@@ -70,6 +71,7 @@ export class RecommendMultiCityService {
       alternatives,
       counterfactuals,
       confidence,
+      warnings,
     );
 
     const trace: TraceStage[] = [
