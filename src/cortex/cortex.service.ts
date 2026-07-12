@@ -62,22 +62,24 @@ Our recommendation has a match score of {matchPct}% with a confidence tier of "{
 In 3-4 sentences, explain why the #1 ranked flight is the absolute best match for this traveler. You must justify this recommendation by directly citing the preferences evidence, the trade-offs they are making, and the decision boundary. Do not invent any facts or reasoning that isn't grounded in the provided data. Be extremely direct and concise.`);
 
 const ROUTE_PROMPT = ChatPromptTemplate.fromTemplate(`
-Extract the flight origin, destination, and intermediate cities/stay durations from this travel request.
+Extract the flight route from this travel request.
 The traveler's home airport is {homeAirport}.
 Known airport codes: {knownCodes}.
 
 Request: "{requestText}"
 
 Rules:
-- "home" or "go home" or "return home" means the traveler's home airport ({homeAirport}).
-- "from X" means X is the ORIGIN. "to X" or just naming a city as a target means DESTINATION.
-- "via X" or visiting a list of cities in a sequence means intermediate cities in a multi-city route.
-- If it is a multi-city route (visiting 2 or more intermediate cities, e.g. "visit London, Paris, and Rome"), set "cities" to the list of IATA codes in travel order, and set "origin" and "destination" to null.
-- If it is a single-leg flight (A to B), set "cities" to null, and identify "origin" and "destination". If origin is not mentioned, default "origin" to {homeAirport}.
-- Only use airport codes from the known list. If you cannot confidently determine a code, use null.
-- Also extract any per-city stay durations in nights if mentioned (e.g. "3 nights in Rome", "stay in CDG for 2 days"). Return the durations as a JSON record mapping the airport code to the number of nights.
+- "home", "back home", "return home", "go home", "and return", "round trip" all mean the traveler's home airport ({homeAirport}).
+- MULTI-CITY (use whenever 2+ stops are involved, including round trips): set "cities" to the full ordered list of IATA stop codes NOT including the departure origin. Set "origin" and "destination" to null.
+  Examples:
+  · "ICN to NYC and back home" → cities: ["JFK", "ICN"]
+  · "visit London, Paris, Rome" → cities: ["LHR", "CDG", "FCO"]
+  · "fly to Tokyo, then Seoul, then home" → cities: ["NRT", "ICN"]
+- SINGLE LEG (one-way, no return): set "cities" to null, set "origin" (default to {homeAirport} if not stated) and "destination".
+- Only use airport codes from the known list. If a city has multiple airports, pick the primary one. If unsure, use null.
+- Extract per-city stay durations if mentioned (e.g. "3 nights in Rome" → stayDurations: {{"FCO": 3}}). The final home leg always has 0 nights.
 
-Respond with ONLY this JSON object, no other text or explanation:
+Respond with ONLY this JSON, no explanation:
 {{"origin": "XXX" | null, "destination": "XXX" | null, "cities": ["XXX", "YYY"] | null, "stayDurations": {{"XXX": 2}} | null}}
 `);
 

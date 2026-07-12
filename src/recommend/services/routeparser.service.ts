@@ -9,6 +9,8 @@ export interface ParsedRouteFromRequest {
   cities?: string[];
   stayDurations: Record<string, number>;
   placeNames: Record<string, string>;
+  /** The airport code of the return-home leg, if this is a round-trip. Excluded from intermediate stays. */
+  returnCity?: string;
 }
 
 @Injectable()
@@ -51,10 +53,16 @@ export class RouteParserService {
         });
       }
 
+      // LLM already includes homeAirport in cities for round-trips.
       if (llmParsed.cities && llmParsed.cities.length > 0) {
         const stayDurations = llmParsed.stayDurations || {};
+        const lastCity = llmParsed.cities[llmParsed.cities.length - 1];
+        const returnCity = lastCity === user.home_airport ? lastCity : undefined;
         llmParsed.cities.forEach((city) => {
-          if (stayDurations[city] == null) {
+          // Never assign a stay to the home return leg
+          if (city === returnCity) {
+            stayDurations[city] = 0;
+          } else if (stayDurations[city] == null) {
             stayDurations[city] = 2;
           }
         });
@@ -65,6 +73,7 @@ export class RouteParserService {
           cities: llmParsed.cities,
           stayDurations,
           placeNames,
+          returnCity,
         };
       }
 
@@ -98,13 +107,15 @@ export class RouteParserService {
     }
 
     let resolvedStayDurations: Record<string, number> = {};
+    const lastCity = route.cities?.[route.cities.length - 1];
+    const returnCity = lastCity === user.home_airport ? lastCity : undefined;
     if (route.cities && route.cities.length > 0) {
-      resolvedStayDurations = this.parseStayDurationsFromText(
-        requestText,
-        store,
-      );
+      const textDurations = this.parseStayDurationsFromText(requestText, store);
+      Object.assign(resolvedStayDurations, textDurations);
       route.cities.forEach((city) => {
-        if (resolvedStayDurations[city] == null) {
+        if (city === returnCity) {
+          resolvedStayDurations[city] = 0;
+        } else if (resolvedStayDurations[city] == null) {
           resolvedStayDurations[city] = 2;
         }
       });
@@ -117,6 +128,7 @@ export class RouteParserService {
       cities: route.cities,
       stayDurations: resolvedStayDurations,
       placeNames,
+      returnCity,
     };
   }
 
@@ -127,10 +139,14 @@ export class RouteParserService {
   ): { destination?: string; cities?: string[] } {
     const text = requestText.toLowerCase();
 
-    interface FoundEntity {
-      code: string;
-      index: number;
-    }
+    // Detect round-trip intent from keywords — expands [dest, home] directly
+    const roundTripKeywords = [
+      'back home', 'back to home', 'and return', 'return home',
+      'go home', 'round trip', 'roundtrip', 'return flight', 'return back',
+    ];
+    const isRoundTrip = roundTripKeywords.some((kw) => text.includes(kw));
+
+    interface FoundEntity { code: string; index: number; }
     const found: FoundEntity[] = [];
 
     const matches = requestText.match(/\b([A-Z]{3})\b/g);
@@ -157,16 +173,14 @@ export class RouteParserService {
     }
 
     found.sort((a, b) => a.index - b.index);
-
     const codes = found.map((f) => f.code);
 
-    if (codes.length >= 2) {
-      return { cities: codes };
+    // Round-trip with one destination → [dest, home] treated as multi-city
+    if (isRoundTrip && codes.length === 1) {
+      return { cities: [codes[0], homeAirport] };
     }
-    if (codes.length === 1) {
-      return { destination: codes[0] };
-    }
-
+    if (codes.length >= 2) return { cities: codes };
+    if (codes.length === 1) return { destination: codes[0] };
     return {};
   }
 
