@@ -5,6 +5,7 @@ import { applyPerturbations } from '../../core/counterfactuals';
 import { RecommendSingleLegService } from './recommend-single-leg.service';
 import { RecommendMultiCityService } from './recommend-multi-city.service';
 import { RecommendResponse, Perturbation } from '../../core/types';
+import { parseRouteWithLLM } from '../../core/route-parser';
 
 @Injectable()
 export class RecommendService {
@@ -22,10 +23,75 @@ export class RecommendService {
       });
     }
 
-    const route = this.inferRouteFromText(requestText, user.home_airport, store);
+    // 1. Try LLM first
+    const llmParsed = await parseRouteWithLLM(requestText, user.home_airport);
+    if (llmParsed) {
+      const placeNames: Record<string, string> = {};
+      if (llmParsed.destination && store.airports.has(llmParsed.destination)) {
+        placeNames[llmParsed.destination] = store.airports.get(llmParsed.destination)!.city;
+      }
+      if (llmParsed.origin && store.airports.has(llmParsed.origin)) {
+        placeNames[llmParsed.origin] = store.airports.get(llmParsed.origin)!.city;
+      }
+      if (llmParsed.cities) {
+        llmParsed.cities.forEach((city) => {
+          if (store.airports.has(city)) {
+            placeNames[city] = store.airports.get(city)!.city;
+          }
+        });
+      }
+
+      if (llmParsed.cities && llmParsed.cities.length > 0) {
+        const stayDurations = llmParsed.stayDurations || {};
+        llmParsed.cities.forEach((city) => {
+          if (stayDurations[city] == null) {
+            stayDurations[city] = 2;
+          }
+        });
+        return {
+          mode: 'multi' as const,
+          destination: undefined,
+          origin: undefined,
+          cities: llmParsed.cities,
+          stayDurations,
+          placeNames,
+        };
+      } else {
+        return {
+          mode: 'single' as const,
+          destination: llmParsed.destination || undefined,
+          origin: llmParsed.origin || undefined,
+          cities: undefined,
+          stayDurations: {},
+          placeNames,
+        };
+      }
+    }
+
+    // 2. Fallback to Regex
+    const route = this.inferRouteFromText(
+      requestText,
+      user.home_airport,
+      store,
+    );
+    const placeNames: Record<string, string> = {};
+    if (route.destination && store.airports.has(route.destination)) {
+      placeNames[route.destination] = store.airports.get(route.destination)!.city;
+    }
+    if (route.cities) {
+      route.cities.forEach((city) => {
+        if (store.airports.has(city)) {
+          placeNames[city] = store.airports.get(city)!.city;
+        }
+      });
+    }
+
     let resolvedStayDurations: Record<string, number> = {};
     if (route.cities && route.cities.length > 0) {
-      resolvedStayDurations = this.parseStayDurationsFromText(requestText, store);
+      resolvedStayDurations = this.parseStayDurationsFromText(
+        requestText,
+        store,
+      );
       // Pre-fill missing stays with 2 nights
       route.cities.forEach((city) => {
         if (resolvedStayDurations[city] == null) {
@@ -35,10 +101,12 @@ export class RecommendService {
     }
 
     return {
-      mode: route.cities ? 'multi' : 'single',
+      mode: route.cities ? ('multi' as const) : ('single' as const),
       destination: route.destination,
+      origin: undefined,
       cities: route.cities,
       stayDurations: resolvedStayDurations,
+      placeNames,
     };
   }
 
@@ -69,23 +137,37 @@ export class RecommendService {
     const perturbedPref = applyPerturbations(basePref, perturbations);
 
     // 4. Resolve Route (smart inference if not explicitly provided)
+    let resolvedOrigin = data.origin;
     let resolvedDestination = data.destination;
     let resolvedCities = data.cities;
+    let resolvedStayDurations = data.stayDurations;
 
     if (
       !resolvedDestination &&
       (!resolvedCities || resolvedCities.length === 0)
     ) {
-      const inferred = this.inferRouteFromText(
-        requestText,
-        user.home_airport,
-        store,
-      );
-      resolvedDestination = inferred.destination;
-      resolvedCities = inferred.cities;
+      // Try LLM first
+      const llmParsed = await parseRouteWithLLM(requestText, user.home_airport);
+      if (llmParsed) {
+        if (llmParsed.cities && llmParsed.cities.length > 0) {
+          resolvedCities = llmParsed.cities;
+          resolvedStayDurations = llmParsed.stayDurations || {};
+        } else {
+          resolvedOrigin = llmParsed.origin || undefined;
+          resolvedDestination = llmParsed.destination || undefined;
+        }
+      } else {
+        // Fallback to Regex
+        const inferred = this.inferRouteFromText(
+          requestText,
+          user.home_airport,
+          store,
+        );
+        resolvedDestination = inferred.destination;
+        resolvedCities = inferred.cities;
+      }
     }
 
-    let resolvedStayDurations = data.stayDurations;
     if (!resolvedStayDurations && resolvedCities && resolvedCities.length > 0) {
       resolvedStayDurations = this.parseStayDurationsFromText(
         requestText,
@@ -114,7 +196,7 @@ export class RecommendService {
           basePref,
           perturbedPref,
           perturbations,
-          data.origin,
+          resolvedOrigin,
           resolvedDestination,
         );
       return recommendation;
