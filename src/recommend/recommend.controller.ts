@@ -29,6 +29,23 @@ const RecommendRequestSchema = z.object({
 export class RecommendController {
   constructor(private readonly recommendService: RecommendService) {}
 
+  @Post('parse-route')
+  async parseRoute(@Body() body: any) {
+    const parsed = z.object({
+      userId: z.string(),
+      requestText: z.string(),
+    }).safeParse(body);
+
+    if (!parsed.success) {
+      throw new BadRequestException({
+        error: 'Invalid request body',
+        details: parsed.error.format(),
+      });
+    }
+
+    return this.recommendService.parseRouteFromRequest(parsed.data.userId, parsed.data.requestText);
+  }
+
   @Post()
   async getRecommendation(@Body() body: any) {
     const parsed = RecommendRequestSchema.safeParse(body);

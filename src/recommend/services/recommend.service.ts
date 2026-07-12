@@ -13,6 +13,35 @@ export class RecommendService {
     private readonly multiCityService: RecommendMultiCityService,
   ) {}
 
+  async parseRouteFromRequest(userId: string, requestText: string) {
+    const store = getStore();
+    const user = store.users.get(userId);
+    if (!user) {
+      throw new NotFoundException({
+        error: `User with ID ${userId} not found.`,
+      });
+    }
+
+    const route = this.inferRouteFromText(requestText, user.home_airport, store);
+    let resolvedStayDurations: Record<string, number> = {};
+    if (route.cities && route.cities.length > 0) {
+      resolvedStayDurations = this.parseStayDurationsFromText(requestText, store);
+      // Pre-fill missing stays with 2 nights
+      route.cities.forEach((city) => {
+        if (resolvedStayDurations[city] == null) {
+          resolvedStayDurations[city] = 2;
+        }
+      });
+    }
+
+    return {
+      mode: route.cities ? 'multi' : 'single',
+      destination: route.destination,
+      cities: route.cities,
+      stayDurations: resolvedStayDurations,
+    };
+  }
+
   async getRecommendation(data: {
     userId: string;
     requestText: string;
