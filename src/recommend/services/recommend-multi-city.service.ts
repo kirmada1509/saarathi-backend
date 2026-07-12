@@ -28,8 +28,7 @@ export class RecommendMultiCityService {
       });
     }
 
-    const { itinerary, alternatives, counterfactualLabel, scoreGap } =
-      mcResult;
+    const { itinerary, alternatives, counterfactualLabel, scoreGap } = mcResult;
 
     // Multi-city mock ScoredFlight verdict (first leg flight anchor)
     const verdict = itinerary.legs[0].flight;
