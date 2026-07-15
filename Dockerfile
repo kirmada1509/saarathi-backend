@@ -35,4 +35,4 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/data ./data
 COPY package*.json ./
 
-CMD sh -c "npx prisma migrate deploy; node dist/prisma/seed.js; node dist/src/main.js"
+CMD ["node", "dist/src/in.js"]
