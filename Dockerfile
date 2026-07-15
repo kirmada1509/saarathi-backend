@@ -1,6 +1,6 @@
 #------------STAGE 1------------#
 # Base image
-FROM node:24-slim AS base
+FROM node:24-bullseye-slim AS base
 
 #-------------STAGE 2------------#
 # Install dependencies only when needed
@@ -35,4 +35,4 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/data ./data
 COPY package*.json ./
 
-CMD ["node", "dist/src/main"]
+CMD sh -c "npx prisma migrate deploy; node dist/prisma/seed.js; node dist/src/main.js"
