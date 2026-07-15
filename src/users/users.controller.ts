@@ -1,52 +1,49 @@
-import { Controller, Get, Post, Body, BadRequestException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { getStore, coerceUserRow } from '../saarathi/data';
-import { z } from 'zod';
-import { randomUUID } from 'crypto';
-
-const createUserSchema = z.object({
-  home_airport: z.string().toUpperCase().trim(),
-  price_sensitivity: z.enum(['low', 'medium', 'high', 'none']),
-  direct_preference: z.enum(['strong', 'moderate', 'none']),
-  preferred_cabin: z.string().trim().default('Economy'),
-  preferred_airlines: z.string().trim().optional().default(''),
-  raw_history: z.string().trim().min(1, 'History description cannot be empty'),
-});
+import { CreateUserDto } from './dto/create-user.dto';
+import { UserResponseDto } from './dto/user-response.dto';
 
 @Controller('api/users')
 export class UsersController {
   constructor(private prisma: PrismaService) {}
 
   @Get()
-  async getUsers() {
-    return this.prisma.user.findMany({
-      select: {
-        user_id: true,
-        home_airport: true,
-        home_city: true,
-        raw_history: true,
-        age: true,
-        price_sensitivity: true,
-        direct_preference: true,
-        preferred_cabin: true,
-        preferred_airlines: true,
-      },
-    });
+  async getUsers(): Promise<UserResponseDto[]> {
+    return this.prisma.user
+      .findMany({
+        select: {
+          id: true,
+          user_id: true,
+          age: true,
+          home_airport: true,
+          home_city: true,
+          frequent_flyer: true,
+          preferred_airlines: true,
+          preferred_cabin: true,
+          price_sensitivity: true,
+          direct_preference: true,
+          max_layover_minutes: true,
+          date_flexibility_days: true,
+          multi_city_tendency: true,
+          trip_purpose: true,
+          preferred_departure: true,
+          baggage_preference: true,
+          seasonal_pattern: true,
+          raw_history: true,
+        },
+      })
+      .then((users) => users.map((user) => UserResponseDto.fromEntity(user)));
   }
 
   @Post()
-  async createUser(@Body() rawBody: unknown) {
-    const parseResult = createUserSchema.safeParse(rawBody);
-    if (!parseResult.success) {
-      const errorMsg = parseResult.error.issues
-        .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
-        .join(', ');
-      throw new BadRequestException({
-        error: `Validation failed: ${errorMsg}`,
-      });
-    }
-
-    const body = parseResult.data;
+  async createUser(@Body() body: CreateUserDto): Promise<UserResponseDto> {
     const store = getStore();
     const targetAirport = body.home_airport;
 
@@ -113,7 +110,6 @@ export class UsersController {
     const newUserCoerced = coerceUserRow(createdUserDb);
     store.users.set(userId, newUserCoerced);
 
-    return createdUserDb;
+    return UserResponseDto.fromEntity(createdUserDb);
   }
 }
-

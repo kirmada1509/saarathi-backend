@@ -59,7 +59,8 @@ export class RouteParserService {
       if (llmParsed.cities && llmParsed.cities.length > 0) {
         const stayDurations = llmParsed.stayDurations || {};
         const lastCity = llmParsed.cities[llmParsed.cities.length - 1];
-        const returnCity = lastCity === user.home_airport ? lastCity : undefined;
+        const returnCity =
+          lastCity === user.home_airport ? lastCity : undefined;
         llmParsed.cities.forEach((city) => {
           // Never assign a stay to the home return leg
           if (city === returnCity) {
@@ -108,7 +109,7 @@ export class RouteParserService {
       });
     }
 
-    let resolvedStayDurations: Record<string, number> = {};
+    const resolvedStayDurations: Record<string, number> = {};
     const lastCity = route.cities?.[route.cities.length - 1];
     const returnCity = lastCity === user.home_airport ? lastCity : undefined;
     if (route.cities && route.cities.length > 0) {
@@ -143,12 +144,22 @@ export class RouteParserService {
 
     // Detect round-trip intent from keywords — expands [dest, home] directly
     const roundTripKeywords = [
-      'back home', 'back to home', 'and return', 'return home',
-      'go home', 'round trip', 'roundtrip', 'return flight', 'return back',
+      'back home',
+      'back to home',
+      'and return',
+      'return home',
+      'go home',
+      'round trip',
+      'roundtrip',
+      'return flight',
+      'return back',
     ];
     const isRoundTrip = roundTripKeywords.some((kw) => text.includes(kw));
 
-    interface FoundEntity { code: string; index: number; }
+    interface FoundEntity {
+      code: string;
+      index: number;
+    }
     const found: FoundEntity[] = [];
 
     const matches = requestText.match(/\b([A-Z]{3})\b/g);

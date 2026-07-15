@@ -22,7 +22,7 @@ describe('UsersController', () => {
     // Warm up the store cache (forces it to load CSV/data if empty)
     const store = getStore();
     if (store.airports.size === 0) {
-      const { buildStore } = await import('../saarathi/data');
+      const { buildStore } = await import('../saarathi/data.js');
       globalThis.__saarathi_store__ = buildStore();
     }
   });
@@ -82,8 +82,12 @@ describe('UsersController', () => {
     expect(inferred).toBeDefined();
 
     // Check evidence entries
-    const directEvidence = inferred.evidence.filter((e) => e.dimension === 'direct');
-    const costEvidence = inferred.evidence.filter((e) => e.dimension === 'cost');
+    const directEvidence = inferred.evidence.filter(
+      (e) => e.dimension === 'direct',
+    );
+    const costEvidence = inferred.evidence.filter(
+      (e) => e.dimension === 'cost',
+    );
 
     expect(directEvidence.length).toBeGreaterThan(0);
     expect(costEvidence.length).toBeGreaterThan(0);

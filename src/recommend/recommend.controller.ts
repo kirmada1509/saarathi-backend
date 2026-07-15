@@ -1,30 +1,10 @@
-import { Controller, Post, Body, BadRequestException } from '@nestjs/common';
-import { z } from 'zod';
+import { Controller, Post, Body } from '@nestjs/common';
 import { RecommendService } from './services/recommend.service';
 import { RouteParserService } from './services/routeparser.service';
-
-const PerturbationSchema = z.union([
-  z.object({
-    kind: z.literal('price_drop'),
-    flightId: z.string(),
-    toPrice: z.number(),
-  }),
-  z.object({ kind: z.literal('accept_one_stop') }),
-  z.object({ kind: z.literal('bags_matter') }),
-  z.object({ kind: z.literal('evening_ok') }),
-  z.object({ kind: z.literal('ignore_loyalty') }),
-  z.object({ kind: z.literal('shift_dates'), days: z.number() }),
-]);
-
-const RecommendRequestSchema = z.object({
-  userId: z.string(),
-  requestText: z.string(),
-  origin: z.string().optional(),
-  destination: z.string().optional(),
-  cities: z.array(z.string()).optional(),
-  stayDurations: z.record(z.string(), z.number()).optional(),
-  perturbations: z.array(PerturbationSchema).optional(),
-});
+import { ParseRouteRequestDto } from './dto/parse-route-request.dto';
+import { ParseRouteResponseDto } from './dto/parse-route-response.dto';
+import { RecommendRequestDto } from './dto/recommend-request.dto';
+import { RecommendResponseDto } from './dto/recommend-response.dto';
 
 @Controller('api/recommend')
 export class RecommendController {
@@ -34,43 +14,23 @@ export class RecommendController {
   ) {}
 
   @Post('parse-route')
-  async parseRoute(@Body() body: any) {
-    const parsed = z
-      .object({
-        userId: z.string(),
-        requestText: z.string(),
-      })
-      .safeParse(body);
-
-    if (!parsed.success) {
-      throw new BadRequestException({
-        error: 'Invalid request body',
-        details: parsed.error.format(),
-      });
-    }
-
+  async parseRoute(
+    @Body() body: ParseRouteRequestDto,
+  ): Promise<ParseRouteResponseDto> {
     const warnings: string[] = [];
     const result = await this.routeParserService.parseRouteFromRequest(
-      parsed.data.userId,
-      parsed.data.requestText,
+      body.userId,
+      body.requestText,
       warnings,
     );
-    return {
-      ...result,
-      warnings: warnings.length > 0 ? warnings : undefined,
-    };
+    return ParseRouteResponseDto.from(result, warnings);
   }
 
   @Post()
-  async getRecommendation(@Body() body: any) {
-    const parsed = RecommendRequestSchema.safeParse(body);
-    if (!parsed.success) {
-      throw new BadRequestException({
-        error: 'Invalid request body',
-        details: parsed.error.format(),
-      });
-    }
-
-    return this.recommendService.getRecommendation(parsed.data);
+  async getRecommendation(
+    @Body() body: RecommendRequestDto,
+  ): Promise<RecommendResponseDto> {
+    const result = await this.recommendService.getRecommendation(body);
+    return RecommendResponseDto.from(result);
   }
 }

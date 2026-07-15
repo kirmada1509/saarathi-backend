@@ -4,7 +4,11 @@ import { inferPreferences } from '../../saarathi/preferences';
 import { applyPerturbations } from '../../saarathi/counterfactuals';
 import { RecommendSingleLegService } from './recommend-single-leg.service';
 import { RecommendMultiCityService } from './recommend-multi-city.service';
-import { RecommendResponse, Perturbation, InferredPreference } from '../../saarathi/types';
+import {
+  RecommendResponse,
+  Perturbation,
+  InferredPreference,
+} from '../../saarathi/types';
 import { RouteParserService } from './routeparser.service';
 import { CortexService } from '../../cortex/cortex.service';
 
@@ -41,14 +45,21 @@ export class RecommendService {
     // 2. Infer Preferences (LLM with regex/embeddings fallback)
     let basePref: InferredPreference;
     try {
-      const llmPref = await this.cortexService.inferPreferences(user, requestText, warnings);
+      const llmPref = await this.cortexService.inferPreferences(
+        user,
+        requestText,
+        warnings,
+      );
       if (llmPref) {
         basePref = llmPref;
       } else {
         basePref = await inferPreferences(user, requestText);
       }
     } catch (err) {
-      console.warn('[RecommendService] LLM preference inference failed, falling back:', err);
+      console.warn(
+        '[RecommendService] LLM preference inference failed, falling back:',
+        err,
+      );
       basePref = await inferPreferences(user, requestText);
     }
 

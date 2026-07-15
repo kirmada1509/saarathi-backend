@@ -42,6 +42,52 @@ interface LLMRouteRaw {
   stayDurations?: Record<string, unknown> | null;
 }
 
+interface LLMPreferenceEvidenceRaw {
+  text?: unknown;
+  source?: unknown;
+  dimension?: unknown;
+}
+
+interface LLMPreferenceRaw {
+  direct_weight?: unknown;
+  cost_weight?: unknown;
+  convenience_weight?: unknown;
+  avoid_redeye?: unknown;
+  evidence?: unknown[] | null;
+}
+
+const evidenceSources = new Set<EvidenceItem['source']>([
+  'structured',
+  'raw_history',
+  'embedding',
+  'trip_description',
+]);
+
+const evidenceDimensions = new Set<EvidenceItem['dimension']>([
+  'direct',
+  'cost',
+  'convenience',
+  'redeye',
+  'airline',
+  'cabin',
+]);
+
+function isEvidenceSource(value: unknown): value is EvidenceItem['source'] {
+  return (
+    typeof value === 'string' &&
+    evidenceSources.has(value as EvidenceItem['source'])
+  );
+}
+
+function isEvidenceDimension(
+  value: unknown,
+): value is EvidenceItem['dimension'] {
+  return (
+    typeof value === 'string' &&
+    evidenceDimensions.has(value as EvidenceItem['dimension'])
+  );
+}
+
 // ─── Prompt templates ────────────────────────────────────────────────────────
 
 const EXPLAIN_PROMPT = ChatPromptTemplate.fromTemplate(`
@@ -198,9 +244,10 @@ export class CortexService {
       })
       .filter(Boolean);
 
-    const evidenceStr = cleanEvidence.length > 0
-      ? `This recommendation is aligned with the traveler's preference profile, specifically: ${cleanEvidence.join(', ')}.`
-      : `This recommendation is based on their structured profile preferences.`;
+    const evidenceStr =
+      cleanEvidence.length > 0
+        ? `This recommendation is aligned with the traveler's preference profile, specifically: ${cleanEvidence.join(', ')}.`
+        : `This recommendation is based on their structured profile preferences.`;
 
     const stopDesc = best.stops === 0 ? 'nonstop' : `${best.stops} stop(s)`;
     const durationHrs = (best.duration_minutes / 60).toFixed(1);
@@ -235,7 +282,9 @@ export class CortexService {
 
     const model = this.buildGroqModel(0.4);
     if (!model) {
-      warnings?.push('Groq LLM is offline or GROQ_API_KEY is missing. Using local explanation fallback.');
+      warnings?.push(
+        'Groq LLM is offline or GROQ_API_KEY is missing. Using local explanation fallback.',
+      );
       return this.explanationFallback(userId, pref, ranked, confidence);
     }
 
@@ -260,7 +309,9 @@ export class CortexService {
         '[CortexService] Explanation call failed, using fallback:',
         err,
       );
-      warnings?.push('Groq LLM rate-limited or API call failed. Using local explanation fallback.');
+      warnings?.push(
+        'Groq LLM rate-limited or API call failed. Using local explanation fallback.',
+      );
       return this.explanationFallback(userId, pref, ranked, confidence);
     }
   }
@@ -283,7 +334,9 @@ export class CortexService {
 
     const model = this.buildGroqModel(0);
     if (!model) {
-      warnings?.push('Groq LLM is offline or GROQ_API_KEY is missing. Using local route parser fallback.');
+      warnings?.push(
+        'Groq LLM is offline or GROQ_API_KEY is missing. Using local route parser fallback.',
+      );
       return null;
     }
 
@@ -348,7 +401,9 @@ export class CortexService {
       return result;
     } catch (err) {
       console.error('[CortexService] Route parse failed:', err);
-      warnings?.push('Groq LLM rate-limited or API call failed. Using local route parser fallback.');
+      warnings?.push(
+        'Groq LLM rate-limited or API call failed. Using local route parser fallback.',
+      );
       return null;
     }
   }
@@ -363,7 +418,9 @@ export class CortexService {
   ): Promise<InferredPreference | null> {
     const model = this.buildGroqModel(0);
     if (!model) {
-      warnings?.push('Groq LLM is offline or GROQ_API_KEY is missing. Using local preferences fallback.');
+      warnings?.push(
+        'Groq LLM is offline or GROQ_API_KEY is missing. Using local preferences fallback.',
+      );
       return null;
     }
 
@@ -392,44 +449,77 @@ export class CortexService {
         );
       }
 
-      const raw = JSON.parse(jsonText);
+      const parsed: unknown = JSON.parse(jsonText);
+      const raw = parsed as LLMPreferenceRaw;
 
-      const direct_weight = typeof raw.direct_weight === 'number' ? Math.round(raw.direct_weight * 100) / 100 : 0.3;
-      const cost_weight = typeof raw.cost_weight === 'number' ? Math.round(raw.cost_weight * 100) / 100 : 0.5;
-      const convenience_weight = typeof raw.convenience_weight === 'number' ? Math.round(raw.convenience_weight * 100) / 100 : 0.7;
-      const avoid_redeye = typeof raw.avoid_redeye === 'boolean' ? raw.avoid_redeye : false;
+      const direct_weight =
+        typeof raw.direct_weight === 'number'
+          ? Math.round(raw.direct_weight * 100) / 100
+          : 0.3;
+      const cost_weight =
+        typeof raw.cost_weight === 'number'
+          ? Math.round(raw.cost_weight * 100) / 100
+          : 0.5;
+      const convenience_weight =
+        typeof raw.convenience_weight === 'number'
+          ? Math.round(raw.convenience_weight * 100) / 100
+          : 0.7;
+      const avoid_redeye =
+        typeof raw.avoid_redeye === 'boolean' ? raw.avoid_redeye : false;
 
       let evidence: EvidenceItem[] = [];
       if (Array.isArray(raw.evidence)) {
-        evidence = raw.evidence.map((e: any) => ({
-          text: String(e.text || ''),
-          source: String(e.source || 'structured') as any,
-          dimension: String(e.dimension || 'direct') as any,
-        }));
+        evidence = raw.evidence.map((entry) => {
+          const evidenceEntry = entry as LLMPreferenceEvidenceRaw;
+          return {
+            text:
+              typeof evidenceEntry.text === 'string' ? evidenceEntry.text : '',
+            source: isEvidenceSource(evidenceEntry.source)
+              ? evidenceEntry.source
+              : 'structured',
+            dimension: isEvidenceDimension(evidenceEntry.dimension)
+              ? evidenceEntry.dimension
+              : 'direct',
+          };
+        });
       }
 
-      if (!evidence.some((e) => e.source === 'structured' && e.dimension === 'direct')) {
+      if (
+        !evidence.some(
+          (e) => e.source === 'structured' && e.dimension === 'direct',
+        )
+      ) {
         evidence.unshift({
           text: `structured: direct_preference=${user.direct_preference} -> direct_weight=${direct_weight}`,
           source: 'structured',
           dimension: 'direct',
         });
       }
-      if (!evidence.some((e) => e.source === 'structured' && e.dimension === 'cost')) {
+      if (
+        !evidence.some(
+          (e) => e.source === 'structured' && e.dimension === 'cost',
+        )
+      ) {
         evidence.unshift({
           text: `structured: price_sensitivity=${user.price_sensitivity} -> cost_weight=${cost_weight}`,
           source: 'structured',
           dimension: 'cost',
         });
       }
-      if (preferredAirlines.length > 0 && !evidence.some((e) => e.dimension === 'airline')) {
+      if (
+        preferredAirlines.length > 0 &&
+        !evidence.some((e) => e.dimension === 'airline')
+      ) {
         evidence.push({
           text: `structured: preferred airlines are ${preferredAirlines.join(', ')}`,
           source: 'structured',
           dimension: 'airline',
         });
       }
-      if (user.preferred_cabin && !evidence.some((e) => e.dimension === 'cabin')) {
+      if (
+        user.preferred_cabin &&
+        !evidence.some((e) => e.dimension === 'cabin')
+      ) {
         evidence.push({
           text: `structured: preferred cabin is ${user.preferred_cabin}`,
           source: 'structured',
@@ -452,7 +542,9 @@ export class CortexService {
       };
     } catch (err) {
       console.error('[CortexService] Preference parse failed:', err);
-      warnings?.push('Groq LLM rate-limited or API call failed. Using local preferences fallback.');
+      warnings?.push(
+        'Groq LLM rate-limited or API call failed. Using local preferences fallback.',
+      );
       return null;
     }
   }

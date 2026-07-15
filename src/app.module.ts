@@ -1,4 +1,9 @@
-import { Module, OnModuleInit, NestModule, MiddlewareConsumer } from '@nestjs/common';
+import {
+  Module,
+  OnModuleInit,
+  NestModule,
+  MiddlewareConsumer,
+} from '@nestjs/common';
 import { PrismaService } from './prisma.service';
 import { UsersModule } from './users/users.module';
 import { RecommendModule } from './recommend/recommend.module';
