@@ -87,7 +87,7 @@ export class UsersController {
     const createdUserDb = await this.prisma.user.create({
       data: {
         user_id: userId,
-        age: 30,
+        age: body.age,
         home_airport: targetAirport,
         home_city: airportInfo.city,
         frequent_flyer: 'None',

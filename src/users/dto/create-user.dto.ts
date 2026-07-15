@@ -1,5 +1,5 @@
-import { Transform } from 'class-transformer';
-import { IsEnum, IsNotEmpty, IsString } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import { IsEnum, IsInt, IsNotEmpty, IsString, Max, Min } from 'class-validator';
 import {
   trimString,
   trimStringOrDefault,
@@ -26,6 +26,12 @@ export type DirectPreferenceDto =
   (typeof DirectPreferenceOptions)[keyof typeof DirectPreferenceOptions];
 
 export class CreateUserDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(18)
+  @Max(100)
+  age!: number;
+
   @IsString()
   @Transform(trimUppercaseString)
   home_airport!: string;
