@@ -51,6 +51,28 @@ export class RouteStayInferenceService {
       resolvedCities = inferred.cities;
     }
 
+    // Default fallback for single-leg destination if still missing
+    if (
+      !resolvedDestination &&
+      (!resolvedCities || resolvedCities.length === 0)
+    ) {
+      const flightsFromHome = store.flightsByOrigin.get(homeAirport) ?? [];
+      if (flightsFromHome.length > 0) {
+        resolvedDestination = flightsFromHome[0].destination;
+      }
+    }
+
+    // Throw error if still no destination and not a multi-city route
+    if (
+      !resolvedDestination &&
+      (!resolvedCities || resolvedCities.length === 0)
+    ) {
+      throw new NotFoundException({
+        error:
+          'Could not resolve destination. Please select a destination airport.',
+      });
+    }
+
     if (!resolvedStayDurations && resolvedCities && resolvedCities.length > 0) {
       resolvedStayDurations = this.parseStayDurationsFromText(
         requestText,

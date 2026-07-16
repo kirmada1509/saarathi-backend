@@ -1,5 +1,5 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { getStore, DataStore } from '../../saarathi/data';
+import { Injectable } from '@nestjs/common';
+import { getStore } from '../../saarathi/data';
 import { filterAndRank, selectAlternatives } from '../../saarathi/ranking';
 import { computeCounterfactuals } from '../../saarathi/counterfactuals';
 import { computeConfidence } from '../../saarathi/confidence';
@@ -26,7 +26,7 @@ export interface RecommendSingleLegParams {
   perturbedPref: InferredPreference;
   perturbations: Perturbation[];
   explicitOrigin?: string;
-  explicitDestination?: string;
+  explicitDestination: string;
   warnings?: string[];
 }
 
@@ -44,27 +44,19 @@ export class RecommendSingleLegService {
       perturbedPref,
       perturbations,
       explicitOrigin,
-      explicitDestination,
+      explicitDestination: destination,
       warnings,
     } = params;
     const store = getStore();
 
-    // 1. Resolve destination (smart text search or user defaults)
-    const destination = this.resolveDestination(
-      requestText,
-      user.home_airport,
-      store,
-      explicitDestination,
-    );
-
-    // 2. Fetch routes and configure parameters
+    // 1. Fetch routes and configure parameters
     const origin = explicitOrigin ?? user.home_airport;
     const routeFlights =
       store.flightsByRoute.get(`${origin}-${destination}`) ?? [];
-    const preferredDays = this.extractPreferredDays(requestText);
+    const preferredDays = perturbedPref.preferredDays ?? [];
     const opts = { origin, destination, perturbations, preferredDays };
 
-    // 3. Filter and Rank (with dynamic constraint relaxation fallback if flights match is empty)
+    // 2. Filter and Rank (with dynamic constraint relaxation fallback if flights match is empty)
     const { ranked, filterTrace, relaxedNote } =
       this.runSingleLegRoutingWithFallback(routeFlights, perturbedPref, opts);
 
@@ -122,7 +114,7 @@ export class RecommendSingleLegService {
       explanation = `[${relaxedNote.trim()}] ${explanation}`;
     }
 
-    // 4. Generate structured execution trace stages
+    // 3. Generate structured execution trace stages
     const trace = this.buildSingleLegTrace(
       userId,
       requestText,
@@ -149,51 +141,6 @@ export class RecommendSingleLegService {
       explanation,
       appliedPerturbations: perturbations,
     };
-  }
-
-  /**
-   * Resolves the target airport code, parsing from requestText if missing or fallback to user defaults.
-   */
-  private resolveDestination(
-    requestText: string,
-    homeAirport: string,
-    store: DataStore,
-    explicitDestination?: string,
-  ): string {
-    let destination = explicitDestination;
-
-    if (!destination && requestText) {
-      const uppercaseMatch = requestText.match(/\b([A-Z]{3})\b/);
-      if (uppercaseMatch) {
-        destination = uppercaseMatch[1];
-      } else {
-        for (const [code, info] of store.airports.entries()) {
-          if (
-            requestText.toLowerCase().includes(info.city.toLowerCase()) ||
-            requestText.toLowerCase().includes(code.toLowerCase())
-          ) {
-            destination = code;
-            break;
-          }
-        }
-      }
-    }
-
-    if (!destination) {
-      const flightsFromHome = store.flightsByOrigin.get(homeAirport) ?? [];
-      if (flightsFromHome.length > 0) {
-        destination = flightsFromHome[0].destination;
-      }
-    }
-
-    if (!destination) {
-      throw new NotFoundException({
-        error:
-          'Could not resolve destination. Please select a destination airport.',
-      });
-    }
-
-    return destination;
   }
 
   /**
@@ -357,14 +304,6 @@ export class RecommendSingleLegService {
       },
       { id: 'verdict', label: 'Verdict Summary', payload: verdict },
     ];
-  }
-
-  private extractPreferredDays(requestText: string): string[] {
-    const matches = requestText.match(
-      /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi,
-    );
-    if (!matches) return [];
-    return [...new Set(matches.map((d) => d.toLowerCase()))];
   }
 
   private findBindingConstraint(

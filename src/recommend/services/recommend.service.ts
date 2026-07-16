@@ -82,7 +82,7 @@ export class RecommendService {
           perturbedPref,
           perturbations,
           explicitOrigin: resolved.origin,
-          explicitDestination: resolved.destination,
+          explicitDestination: resolved.destination!,
           warnings,
         });
 

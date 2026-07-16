@@ -71,6 +71,7 @@ export interface InferredPreference {
   evidence: EvidenceItem[];
   bags_matter?: boolean;
   date_flexibility_days_override?: number;
+  preferredDays?: string[];
 }
 
 export interface ScoredFlight extends FlightRow {

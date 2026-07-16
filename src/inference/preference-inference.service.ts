@@ -15,6 +15,7 @@ export class PreferenceInferenceService {
     requestText: string,
     warnings?: string[],
   ): Promise<InferredPreference> {
+    let pref: InferredPreference;
     try {
       const llmPref = await this.cortexService.inferPreferences(
         user,
@@ -24,13 +25,24 @@ export class PreferenceInferenceService {
       if (!llmPref) {
         throw new Error('LLM preference inference returned null');
       }
-      return llmPref;
+      pref = llmPref;
     } catch (err) {
       console.warn(
         '[PreferenceInferenceService] LLM preference inference failed, falling back:',
         err,
       );
-      return await inferPreferences(user, requestText);
+      pref = await inferPreferences(user, requestText);
     }
+
+    pref.preferredDays = this.extractPreferredDays(requestText);
+    return pref;
+  }
+
+  private extractPreferredDays(requestText: string): string[] {
+    const matches = requestText.match(
+      /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi,
+    );
+    if (!matches) return [];
+    return [...new Set(matches.map((d) => d.toLowerCase()))];
   }
 }
