@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { getStore, DataStore } from '../../saarathi/data';
-import { CortexService } from '../../cortex/cortex.service';
+import { getStore, DataStore } from '../saarathi/data';
+import { CortexService } from '../cortex/cortex.service';
 
 export interface ParsedRouteFromRequest {
   mode: 'single' | 'multi';
@@ -14,8 +14,61 @@ export interface ParsedRouteFromRequest {
 }
 
 @Injectable()
-export class RouteParserService {
+export class RouteStayInferenceService {
   constructor(private readonly cortexService: CortexService) {}
+
+  /**
+   * Resolves origin, destination, cities and stay durations.
+   * Runs the fallback heuristic-based inference when values are not explicitly provided.
+   */
+  resolveRouteAndStays(
+    requestText: string,
+    homeAirport: string,
+    store: DataStore,
+    provided: {
+      origin?: string;
+      destination?: string;
+      cities?: string[];
+      stayDurations?: Record<string, number>;
+    },
+  ): {
+    origin?: string;
+    destination?: string;
+    cities?: string[];
+    stayDurations?: Record<string, number>;
+  } {
+    const resolvedOrigin = provided.origin;
+    let resolvedDestination = provided.destination;
+    let resolvedCities = provided.cities;
+    let resolvedStayDurations = provided.stayDurations;
+
+    if (
+      !resolvedDestination &&
+      (!resolvedCities || resolvedCities.length === 0)
+    ) {
+      const inferred = this.inferRouteFromText(requestText, homeAirport, store);
+      resolvedDestination = inferred.destination;
+      resolvedCities = inferred.cities;
+    }
+
+    if (!resolvedStayDurations && resolvedCities && resolvedCities.length > 0) {
+      resolvedStayDurations = this.parseStayDurationsFromText(
+        requestText,
+        store,
+      );
+    }
+
+    return {
+      origin: resolvedOrigin,
+      destination: resolvedDestination,
+      cities: resolvedCities,
+      stayDurations: resolvedStayDurations,
+    };
+  }
+
+  /**
+   * Parsed route from request utilizing the LLM with regex/heuristic-based fallbacks.
+   */
   async parseRouteFromRequest(
     userId: string,
     requestText: string,
@@ -135,6 +188,9 @@ export class RouteParserService {
     };
   }
 
+  /**
+   * Infers origin/destination or multi-city route from text prompts (fallback logic).
+   */
   inferRouteFromText(
     requestText: string,
     homeAirport: string,
@@ -197,6 +253,9 @@ export class RouteParserService {
     return {};
   }
 
+  /**
+   * Infers stay durations for cities from text prompts (fallback logic).
+   */
   parseStayDurationsFromText(
     requestText: string,
     store: DataStore,

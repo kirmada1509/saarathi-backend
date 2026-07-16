@@ -18,20 +18,35 @@ import {
   UserRow,
 } from '../../saarathi/types';
 
+export interface RecommendSingleLegParams {
+  userId: string;
+  requestText: string;
+  user: UserRow;
+  basePref: InferredPreference;
+  perturbedPref: InferredPreference;
+  perturbations: Perturbation[];
+  explicitOrigin?: string;
+  explicitDestination?: string;
+  warnings?: string[];
+}
+
 @Injectable()
 export class RecommendSingleLegService {
   constructor(private readonly cortexService: CortexService) {}
   async getRecommendation(
-    userId: string,
-    requestText: string,
-    user: UserRow,
-    basePref: InferredPreference,
-    perturbedPref: InferredPreference,
-    perturbations: Perturbation[],
-    explicitOrigin?: string,
-    explicitDestination?: string,
-    warnings?: string[],
+    params: RecommendSingleLegParams,
   ): Promise<RecommendResponse> {
+    const {
+      userId,
+      requestText,
+      user,
+      basePref,
+      perturbedPref,
+      perturbations,
+      explicitOrigin,
+      explicitDestination,
+      warnings,
+    } = params;
     const store = getStore();
 
     // 1. Resolve destination (smart text search or user defaults)

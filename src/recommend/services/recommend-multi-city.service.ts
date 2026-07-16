@@ -10,18 +10,31 @@ import {
   Perturbation,
 } from '../../saarathi/types';
 
+export interface RecommendMultiCityParams {
+  userId: string;
+  requestText: string;
+  cities: string[];
+  perturbedPref: InferredPreference;
+  perturbations: Perturbation[];
+  stayDurations?: Record<string, number>;
+  warnings?: string[];
+}
+
 @Injectable()
 export class RecommendMultiCityService {
   constructor(private readonly cortexService: CortexService) {}
   async getRecommendation(
-    userId: string,
-    requestText: string,
-    cities: string[],
-    perturbedPref: InferredPreference,
-    perturbations: Perturbation[],
-    stayDurations?: Record<string, number>,
-    warnings?: string[],
+    params: RecommendMultiCityParams,
   ): Promise<RecommendResponse> {
+    const {
+      userId,
+      requestText,
+      cities,
+      perturbedPref,
+      perturbations,
+      stayDurations,
+      warnings,
+    } = params;
     const mcResult = optimizeRoute(cities, perturbedPref, stayDurations);
 
     if (!mcResult) {

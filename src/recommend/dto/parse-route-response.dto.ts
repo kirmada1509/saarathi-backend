@@ -1,4 +1,4 @@
-import { ParsedRouteFromRequest } from '../services/routeparser.service';
+import { ParsedRouteFromRequest } from '../../inference/inference.service';
 
 export class ParseRouteResponseDto implements ParsedRouteFromRequest {
   mode!: ParsedRouteFromRequest['mode'];

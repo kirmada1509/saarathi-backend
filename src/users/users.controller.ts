@@ -10,7 +10,7 @@ import { getStore, coerceUserRow } from '../saarathi/data';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 
-@Controller('api/users')
+@Controller('users')
 export class UsersController {
   constructor(private prisma: PrismaService) {}
 
