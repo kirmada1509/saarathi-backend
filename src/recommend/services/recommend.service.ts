@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { getStore } from '../../saarathi/data';
-import { applyPerturbations } from '../../saarathi/counterfactuals';
+import { SaarathiDataService } from '../../saarathi/data.service';
+import { CounterfactualsService } from '../../saarathi/counterfactuals.service';
 import { RecommendSingleLegService } from './recommend-single-leg.service';
 import { RecommendMultiCityService } from './recommend-multi-city.service';
 import { InferenceService } from '../../inference/inference.service';
@@ -13,13 +13,15 @@ export class RecommendService {
     private readonly singleLegService: RecommendSingleLegService,
     private readonly multiCityService: RecommendMultiCityService,
     private readonly inferenceService: InferenceService,
+    private readonly dataService: SaarathiDataService,
+    private readonly counterfactualsService: CounterfactualsService,
   ) {}
 
   async getRecommendation(
     data: RecommendRequestDto,
   ): Promise<RecommendResponse> {
     const { userId, requestText, perturbations = [] } = data;
-    const store = getStore();
+    const store = this.dataService.getStore();
     const warnings: string[] = [];
 
     // 1. Get User Profile
@@ -39,7 +41,10 @@ export class RecommendService {
     );
 
     // 3. Apply active perturbations to preferences
-    const perturbedPref = applyPerturbations(basePref, perturbations);
+    const perturbedPref = this.counterfactualsService.applyPerturbations(
+      basePref,
+      perturbations,
+    );
 
     // 4. Resolve Route (smart inference if not explicitly provided)
     const resolved = this.inferenceService.resolveRouteAndStays(

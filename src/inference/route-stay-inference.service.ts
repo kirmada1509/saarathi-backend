@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { getStore, DataStore } from '../saarathi/data';
+import { SaarathiDataService, DataStore } from '../saarathi/data.service';
 import { CortexService } from '../cortex/cortex.service';
 
 export interface ParsedRouteFromRequest {
@@ -15,7 +15,10 @@ export interface ParsedRouteFromRequest {
 
 @Injectable()
 export class RouteStayInferenceService {
-  constructor(private readonly cortexService: CortexService) {}
+  constructor(
+    private readonly cortexService: CortexService,
+    private readonly dataService: SaarathiDataService,
+  ) {}
 
   /**
    * Resolves origin, destination, cities and stay durations.
@@ -96,7 +99,7 @@ export class RouteStayInferenceService {
     requestText: string,
     warnings?: string[],
   ): Promise<ParsedRouteFromRequest> {
-    const store = getStore();
+    const store = this.dataService.getStore();
     const user = store.users.get(userId);
     if (!user) {
       throw new NotFoundException({

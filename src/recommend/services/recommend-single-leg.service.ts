@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { getStore } from '../../saarathi/data';
-import { filterAndRank, selectAlternatives } from '../../saarathi/ranking';
-import { computeCounterfactuals } from '../../saarathi/counterfactuals';
-import { computeConfidence } from '../../saarathi/confidence';
+import { SaarathiDataService } from '../../saarathi/data.service';
+import { RankingService } from '../../saarathi/ranking.service';
+import { CounterfactualsService } from '../../saarathi/counterfactuals.service';
+import { ConfidenceService } from '../../saarathi/confidence.service';
 import { CortexService } from '../../cortex/cortex.service';
 import {
   TraceStage,
@@ -10,7 +10,6 @@ import {
   InferredPreference,
   RecommendResponse,
   FilterTrace,
-  FlightRow,
   Alternative,
   Counterfactual,
   Confidence,
@@ -32,7 +31,13 @@ export interface RecommendSingleLegParams {
 
 @Injectable()
 export class RecommendSingleLegService {
-  constructor(private readonly cortexService: CortexService) {}
+  constructor(
+    private readonly cortexService: CortexService,
+    private readonly dataService: SaarathiDataService,
+    private readonly rankingService: RankingService,
+    private readonly counterfactualsService: CounterfactualsService,
+    private readonly confidenceService: ConfidenceService,
+  ) {}
   async getRecommendation(
     params: RecommendSingleLegParams,
   ): Promise<RecommendResponse> {
@@ -47,7 +52,7 @@ export class RecommendSingleLegService {
       explicitDestination: destination,
       warnings,
     } = params;
-    const store = getStore();
+    const store = this.dataService.getStore();
 
     // 1. Fetch routes and configure parameters
     const origin = explicitOrigin ?? user.home_airport;
@@ -58,7 +63,11 @@ export class RecommendSingleLegService {
 
     // 2. Filter and Rank (with dynamic constraint relaxation fallback if flights match is empty)
     const { ranked, filterTrace, relaxedNote } =
-      this.runSingleLegRoutingWithFallback(routeFlights, perturbedPref, opts);
+      this.rankingService.runSingleLegRoutingWithFallback(
+        routeFlights,
+        perturbedPref,
+        opts,
+      );
 
     let verdict: ScoredFlight | null = null;
     let alternatives: Alternative[] = [];
@@ -68,7 +77,9 @@ export class RecommendSingleLegService {
 
     if (ranked.length === 0) {
       // no flights matched even after relaxation
-      const bindingStep = this.findBindingConstraint(filterTrace.steps);
+      const bindingStep = this.rankingService.findBindingConstraint(
+        filterTrace.steps,
+      );
       const staticFallback =
         `No flights matched your hard constraints (layovers, dates, redeyes). ` +
         (bindingStep
@@ -76,26 +87,29 @@ export class RecommendSingleLegService {
           : '') +
         `Review the decision boundaries below to see what changes would produce recommendations.`;
 
-      alternatives = selectAlternatives([], user);
-      counterfactuals = computeCounterfactuals(
+      alternatives = this.rankingService.selectAlternatives([], user);
+      counterfactuals = this.counterfactualsService.computeCounterfactuals(
         [],
         perturbedPref,
         routeFlights,
         opts,
       );
-      confidence = computeConfidence([], perturbedPref);
+      confidence = this.confidenceService.computeConfidence([], perturbedPref);
       explanation = staticFallback;
     } else {
       verdict = ranked[0];
-      alternatives = selectAlternatives(ranked, user);
+      alternatives = this.rankingService.selectAlternatives(ranked, user);
       // Compute counterfactuals against the original unperturbed base preferences
-      counterfactuals = computeCounterfactuals(
+      counterfactuals = this.counterfactualsService.computeCounterfactuals(
         ranked,
         basePref,
         routeFlights,
         opts,
       );
-      confidence = computeConfidence(ranked, perturbedPref);
+      confidence = this.confidenceService.computeConfidence(
+        ranked,
+        perturbedPref,
+      );
 
       // LLM explanation via LlmService
       explanation = await this.cortexService.generateExplanation(
@@ -140,117 +154,6 @@ export class RecommendSingleLegService {
       trace,
       explanation,
       appliedPerturbations: perturbations,
-    };
-  }
-
-  /**
-   * Runs the flight filtering and ranking engine.
-   * If no flights pass, it attempts dynamic constraint relaxation on layover/redeye bounds.
-   */
-  private runSingleLegRoutingWithFallback(
-    routeFlights: FlightRow[],
-    perturbedPref: InferredPreference,
-    opts: {
-      origin: string;
-      destination: string;
-      perturbations: Perturbation[];
-      preferredDays: string[];
-    },
-  ): {
-    ranked: ScoredFlight[];
-    filterTrace: FilterTrace;
-    relaxedNote: string;
-  } {
-    const { ranked, trace: filterTrace } = filterAndRank(
-      routeFlights,
-      perturbedPref,
-      opts,
-    );
-
-    if (ranked.length > 0) {
-      return { ranked, filterTrace, relaxedNote: '' };
-    }
-
-    // Identify the binding constraint (the step that removed the most flights)
-    const bindingStep = this.findBindingConstraint(filterTrace.steps);
-    let relaxedVerdict: ScoredFlight | null = null;
-    let relaxedNote = '';
-
-    if (bindingStep) {
-      const { origin, destination, perturbations, preferredDays } = opts;
-
-      // Try relaxing max_layover_minutes by 1.5x if the binding constraint mentions layover
-      if (bindingStep.constraint.toLowerCase().includes('layover')) {
-        const originalLayover = perturbedPref.max_layover_minutes;
-        const relaxedLayover = Math.round(originalLayover * 1.5);
-        const relaxedPref: InferredPreference = {
-          ...perturbedPref,
-          max_layover_minutes: relaxedLayover,
-        };
-        const relaxedOpts = {
-          origin,
-          destination,
-          perturbations,
-          preferredDays,
-        };
-        const { ranked: relaxedRanked } = filterAndRank(
-          routeFlights,
-          relaxedPref,
-          relaxedOpts,
-        );
-
-        if (relaxedRanked.length > 0) {
-          relaxedVerdict = relaxedRanked[0];
-          relaxedNote = ` [Relaxed: layover <= ${relaxedLayover}m]`;
-        } else {
-          // Still zero — try also disabling redeye avoidance
-          if (perturbedPref.avoid_redeye) {
-            const relaxedPref2: InferredPreference = {
-              ...relaxedPref,
-              avoid_redeye: false,
-            };
-            const { ranked: relaxedRanked2 } = filterAndRank(
-              routeFlights,
-              relaxedPref2,
-              relaxedOpts,
-            );
-            if (relaxedRanked2.length > 0) {
-              relaxedVerdict = relaxedRanked2[0];
-              relaxedNote = ` [Relaxed: layover <= ${relaxedLayover}m + redeye ok]`;
-            }
-          }
-        }
-      } else if (
-        bindingStep.constraint.toLowerCase().includes('redeye') &&
-        perturbedPref.avoid_redeye
-      ) {
-        // Binding constraint is redeye — try disabling it
-        const relaxedPref: InferredPreference = {
-          ...perturbedPref,
-          avoid_redeye: false,
-        };
-        const relaxedOpts = {
-          origin,
-          destination,
-          perturbations,
-          preferredDays,
-        };
-        const { ranked: relaxedRanked } = filterAndRank(
-          routeFlights,
-          relaxedPref,
-          relaxedOpts,
-        );
-        if (relaxedRanked.length > 0) {
-          relaxedVerdict = relaxedRanked[0];
-          relaxedNote = ' [Relaxed: redeye ok]';
-        }
-      }
-    }
-
-    return {
-      ranked: relaxedVerdict ? [relaxedVerdict] : [],
-      filterTrace,
-      relaxedNote,
     };
   }
 
@@ -304,15 +207,5 @@ export class RecommendSingleLegService {
       },
       { id: 'verdict', label: 'Verdict Summary', payload: verdict },
     ];
-  }
-
-  private findBindingConstraint(
-    steps: { constraint: string; removed: number; remaining: number }[],
-  ): { constraint: string; removed: number; remaining: number } | null {
-    if (steps.length === 0) return null;
-    return steps.reduce(
-      (max, step) => (step.removed > max.removed ? step : max),
-      steps[0],
-    );
   }
 }

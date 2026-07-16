@@ -3,9 +3,10 @@ import { InferenceService } from './inference.service';
 import { PreferenceInferenceService } from './preference-inference.service';
 import { RouteStayInferenceService } from './route-stay-inference.service';
 import { CortexModule } from '../cortex/cortex.module';
+import { SaarathiModule } from '../saarathi/saarathi.module';
 
 @Module({
-  imports: [CortexModule],
+  imports: [CortexModule, SaarathiModule],
   providers: [
     InferenceService,
     PreferenceInferenceService,

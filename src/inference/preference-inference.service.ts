@@ -1,11 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { CortexService } from '../cortex/cortex.service';
 import { UserRow, InferredPreference } from '../saarathi/types';
-import { inferPreferences } from '../saarathi/preferences';
+import { SaarathiPreferencesService } from '../saarathi/preferences.service';
 
 @Injectable()
 export class PreferenceInferenceService {
-  constructor(private readonly cortexService: CortexService) {}
+  constructor(
+    private readonly cortexService: CortexService,
+    private readonly preferencesService: SaarathiPreferencesService,
+  ) {}
 
   /**
    * Infers traveler preferences using the LLM with a fallback to rule/embedding-based inference.
@@ -31,7 +34,7 @@ export class PreferenceInferenceService {
         '[PreferenceInferenceService] LLM preference inference failed, falling back:',
         err,
       );
-      pref = await inferPreferences(user, requestText);
+      pref = await this.preferencesService.inferPreferences(user, requestText);
     }
 
     pref.preferredDays = this.extractPreferredDays(requestText);

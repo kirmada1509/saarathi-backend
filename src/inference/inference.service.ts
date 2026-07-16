@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { DataStore } from '../saarathi/data';
+import { DataStore } from '../saarathi/data.service';
 import { UserRow, InferredPreference } from '../saarathi/types';
 import { PreferenceInferenceService } from './preference-inference.service';
 import {

@@ -7,19 +7,23 @@ import {
 import { PrismaService } from './prisma.service';
 import { UsersModule } from './users/users.module';
 import { RecommendModule } from './recommend/recommend.module';
-import { initializeStoreFromDb } from './saarathi/data';
+import { SaarathiModule } from './saarathi/saarathi.module';
+import { SaarathiDataService } from './saarathi/data.service';
 import { LoggerMiddleware } from './logger.middleware';
 
 @Module({
-  imports: [UsersModule, RecommendModule],
+  imports: [UsersModule, RecommendModule, SaarathiModule],
   providers: [PrismaService],
 })
 export class AppModule implements OnModuleInit, NestModule {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private dataService: SaarathiDataService,
+  ) {}
 
   async onModuleInit() {
     // Warm up the in-memory cache from the SQLite database on app boot
-    await initializeStoreFromDb(this.prisma);
+    await this.dataService.initializeStoreFromDb(this.prisma);
   }
 
   configure(consumer: MiddlewareConsumer) {

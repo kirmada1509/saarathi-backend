@@ -2,7 +2,9 @@ import { PrismaClient } from '@prisma/client';
 import fs from 'fs';
 import path from 'path';
 import Papa from 'papaparse';
-import { coerceUserRow, coerceFlightRow } from '../src/saarathi/data';
+import { SaarathiDataService } from '../src/saarathi/data.service';
+
+const dataService = new SaarathiDataService();
 
 const prisma = new PrismaClient();
 
@@ -37,7 +39,7 @@ async function main() {
     skipEmptyLines: true,
   });
 
-  const userRows = userParseResult.data.map((row) => coerceUserRow(row));
+  const userRows = userParseResult.data.map((row) => dataService.coerceUserRow(row));
   console.log(`Parsed ${userRows.length} users. Seeding...`);
 
   for (const user of userRows) {
@@ -75,7 +77,7 @@ async function main() {
     skipEmptyLines: true,
   });
 
-  const flightRows = flightParseResult.data.map((row) => coerceFlightRow(row));
+  const flightRows = flightParseResult.data.map((row) => dataService.coerceFlightRow(row));
   console.log(`Parsed ${flightRows.length} flights. Seeding in chunks...`);
 
   // Chunk array to avoid SQLite parameter limit

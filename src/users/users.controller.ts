@@ -6,13 +6,16 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
-import { getStore, coerceUserRow } from '../saarathi/data';
+import { SaarathiDataService } from '../saarathi/data.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 
 @Controller('users')
 export class UsersController {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly dataService: SaarathiDataService,
+  ) {}
 
   @Get()
   async getUsers(): Promise<UserResponseDto[]> {
@@ -44,7 +47,7 @@ export class UsersController {
 
   @Post()
   async createUser(@Body() body: CreateUserDto): Promise<UserResponseDto> {
-    const store = getStore();
+    const store = this.dataService.getStore();
     const targetAirport = body.home_airport;
 
     if (!store.airports.has(targetAirport)) {
@@ -107,7 +110,7 @@ export class UsersController {
     });
 
     // Update in-memory cache directly
-    const newUserCoerced = coerceUserRow(createdUserDb);
+    const newUserCoerced = this.dataService.coerceUserRow(createdUserDb);
     store.users.set(userId, newUserCoerced);
 
     return UserResponseDto.fromEntity(createdUserDb);

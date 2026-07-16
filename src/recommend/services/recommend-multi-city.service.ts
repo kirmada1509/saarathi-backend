@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { optimizeRoute } from '../../saarathi/multicity';
-import { computeConfidence } from '../../saarathi/confidence';
+import { MultiCityService } from '../../saarathi/multicity.service';
+import { ConfidenceService } from '../../saarathi/confidence.service';
 import { CortexService } from '../../cortex/cortex.service';
 import {
   TraceStage,
@@ -22,7 +22,11 @@ export interface RecommendMultiCityParams {
 
 @Injectable()
 export class RecommendMultiCityService {
-  constructor(private readonly cortexService: CortexService) {}
+  constructor(
+    private readonly cortexService: CortexService,
+    private readonly multiCityService: MultiCityService,
+    private readonly confidenceService: ConfidenceService,
+  ) {}
   async getRecommendation(
     params: RecommendMultiCityParams,
   ): Promise<RecommendResponse> {
@@ -35,7 +39,11 @@ export class RecommendMultiCityService {
       stayDurations,
       warnings,
     } = params;
-    const mcResult = optimizeRoute(cities, perturbedPref, stayDurations);
+    const mcResult = this.multiCityService.optimizeRoute(
+      cities,
+      perturbedPref,
+      stayDurations,
+    );
 
     if (!mcResult) {
       throw new NotFoundException({
@@ -73,7 +81,10 @@ export class RecommendMultiCityService {
       },
     ];
 
-    const confidence = computeConfidence(syntheticRanked, perturbedPref);
+    const confidence = this.confidenceService.computeConfidence(
+      syntheticRanked,
+      perturbedPref,
+    );
 
     // LLM explanation via CortexService
     const explanation = await this.cortexService.generateExplanation(
