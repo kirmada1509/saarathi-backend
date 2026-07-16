@@ -59,12 +59,14 @@ export class InferenceService {
       destination?: string;
       cities?: string[];
       stayDurations?: Record<string, number>;
+      fixed_itinerary?: boolean;
     },
   ): {
     origin?: string;
     destination?: string;
     cities?: string[];
     stayDurations?: Record<string, number>;
+    fixed_itinerary?: boolean;
   } {
     return this.routeStayInferenceService.resolveRouteAndStays(
       requestText,
@@ -81,7 +83,7 @@ export class InferenceService {
     requestText: string,
     homeAirport: string,
     store: DataStore,
-  ): { destination?: string; cities?: string[] } {
+  ): { destination?: string; cities?: string[]; fixed_itinerary?: boolean } {
     return this.routeStayInferenceService.inferRouteFromText(
       requestText,
       homeAirport,

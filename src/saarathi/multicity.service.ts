@@ -55,6 +55,8 @@ export class MultiCityService {
     pref: InferredPreference,
     destination?: string,
     stayDurations?: Record<string, number>,
+    requestText?: string,
+    fixed_itinerary?: boolean,
   ): {
     itinerary: MultiCityItinerary;
     alternatives: Alternative[];
@@ -64,11 +66,60 @@ export class MultiCityService {
     const store = this.dataService.getStore();
     const home = pref.home_airport;
 
-    const permutations = permute(cities);
+    // Determine if the user has fixed/locked dates where order shouldn't be permuted.
+    // This can be set in user settings or specified in the prompt text.
+    const user = store.users.get(pref.user_id);
+    const textLower = requestText?.toLowerCase() ?? '';
+
+    const hasOptimizeKeyword =
+      textLower.includes('cheapest') ||
+      textLower.includes('cheap') ||
+      textLower.includes('optimize') ||
+      textLower.includes('lowest') ||
+      textLower.includes('best route') ||
+      textLower.includes('best way') ||
+      textLower.includes('flexible');
+
+    let hasFixedDates = false;
+    if (!hasOptimizeKeyword) {
+      hasFixedDates = !!(
+        fixed_itinerary ||
+        (user &&
+          (user.preferred_departure.toLowerCase().includes('fixed dates') ||
+            user.preferred_departure.toLowerCase().includes('fixed-ish') ||
+            user.raw_history.toLowerCase().includes('dates locked'))) ||
+        textLower.includes('fixed dates') ||
+        textLower.includes('dates locked') ||
+        textLower.includes('strict order') ||
+        textLower.includes('exact order') ||
+        textLower.includes('lock dates') ||
+        textLower.includes('fixed schedule') ||
+        textLower.includes("don't permute") ||
+        textLower.includes('do not permute')
+      );
+    }
+
+    // Determine the final destination:
+    // 1. Use explicitly provided destination if present.
+    // 2. If the user has fixed dates, it is only a round-trip if home is in cities or destination is home.
+    // 3. Otherwise, it defaults to a round-trip returning home.
+    const isRoundTrip =
+      !hasFixedDates || cities.includes(home) || destination === home;
+    const finalDest =
+      destination ?? (isRoundTrip ? home : (cities[cities.length - 1] ?? home));
+
+    // Filter out start (home) and final destination from intermediate cities
+    const filteredCities = cities.filter((c) => c !== home && c !== finalDest);
+
+    // If the user has fixed dates, we do not permute the intermediate cities.
+    // We only evaluate them in the exact order they were specified.
+    const permutations = hasFixedDates
+      ? [filteredCities]
+      : permute(filteredCities);
     const validItineraries: Itinerary[] = [];
 
     for (const perm of permutations) {
-      const route = [home, ...perm, destination ?? home];
+      const route = [home, ...perm, finalDest];
 
       // Precompute ranked flights and top scores for each leg in this route
       const rankedLegs: ScoredFlight[][] = [];

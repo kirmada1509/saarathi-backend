@@ -11,6 +11,7 @@ export interface ParsedRouteFromRequest {
   placeNames: Record<string, string>;
   /** The airport code of the return-home leg, if this is a round-trip. Excluded from intermediate stays. */
   returnCity?: string;
+  fixed_itinerary?: boolean;
 }
 
 @Injectable()
@@ -33,17 +34,20 @@ export class RouteStayInferenceService {
       destination?: string;
       cities?: string[];
       stayDurations?: Record<string, number>;
+      fixed_itinerary?: boolean;
     },
   ): {
     origin?: string;
     destination?: string;
     cities?: string[];
     stayDurations?: Record<string, number>;
+    fixed_itinerary?: boolean;
   } {
     const resolvedOrigin = provided.origin;
     let resolvedDestination = provided.destination;
     let resolvedCities = provided.cities;
     let resolvedStayDurations = provided.stayDurations;
+    let resolvedFixedItinerary = provided.fixed_itinerary;
 
     if (
       !resolvedDestination &&
@@ -52,6 +56,9 @@ export class RouteStayInferenceService {
       const inferred = this.inferRouteFromText(requestText, homeAirport, store);
       resolvedDestination = inferred.destination;
       resolvedCities = inferred.cities;
+      if (resolvedFixedItinerary === undefined) {
+        resolvedFixedItinerary = inferred.fixed_itinerary;
+      }
     }
 
     // Default fallback for single-leg destination if still missing
@@ -88,6 +95,7 @@ export class RouteStayInferenceService {
       destination: resolvedDestination,
       cities: resolvedCities,
       stayDurations: resolvedStayDurations,
+      fixed_itinerary: resolvedFixedItinerary,
     };
   }
 
@@ -155,6 +163,7 @@ export class RouteStayInferenceService {
           stayDurations,
           placeNames,
           returnCity,
+          fixed_itinerary: llmParsed.fixed_itinerary ?? false,
         };
       }
 
@@ -165,6 +174,7 @@ export class RouteStayInferenceService {
         cities: undefined,
         stayDurations: {},
         placeNames,
+        fixed_itinerary: false,
       };
     }
 
@@ -173,6 +183,17 @@ export class RouteStayInferenceService {
       user.home_airport,
       store,
     );
+    const textLower = requestText.toLowerCase();
+    const isFixedItinerary =
+      textLower.includes('fixed dates') ||
+      textLower.includes('dates locked') ||
+      textLower.includes('strict order') ||
+      textLower.includes('exact order') ||
+      textLower.includes('lock dates') ||
+      textLower.includes('fixed schedule') ||
+      textLower.includes("don't permute") ||
+      textLower.includes('do not permute');
+
     const placeNames: Record<string, string> = {};
     if (route.destination && store.airports.has(route.destination)) {
       placeNames[route.destination] = store.airports.get(
@@ -210,6 +231,7 @@ export class RouteStayInferenceService {
       stayDurations: resolvedStayDurations,
       placeNames,
       returnCity,
+      fixed_itinerary: isFixedItinerary,
     };
   }
 
@@ -220,7 +242,7 @@ export class RouteStayInferenceService {
     requestText: string,
     homeAirport: string,
     store: DataStore,
-  ): { destination?: string; cities?: string[] } {
+  ): { destination?: string; cities?: string[]; fixed_itinerary?: boolean } {
     const text = requestText.toLowerCase();
 
     // Detect round-trip intent from keywords — expands [dest, home] directly
@@ -236,6 +258,16 @@ export class RouteStayInferenceService {
       'return back',
     ];
     const isRoundTrip = roundTripKeywords.some((kw) => text.includes(kw));
+
+    const isFixedItinerary =
+      text.includes('fixed dates') ||
+      text.includes('dates locked') ||
+      text.includes('strict order') ||
+      text.includes('exact order') ||
+      text.includes('lock dates') ||
+      text.includes('fixed schedule') ||
+      text.includes("don't permute") ||
+      text.includes('do not permute');
 
     interface FoundEntity {
       code: string;
@@ -271,11 +303,16 @@ export class RouteStayInferenceService {
 
     // Round-trip with one destination → [dest, home] treated as multi-city
     if (isRoundTrip && codes.length === 1) {
-      return { cities: [codes[0], homeAirport] };
+      return {
+        cities: [codes[0], homeAirport],
+        fixed_itinerary: isFixedItinerary,
+      };
     }
-    if (codes.length >= 2) return { cities: codes };
-    if (codes.length === 1) return { destination: codes[0] };
-    return {};
+    if (codes.length >= 2)
+      return { cities: codes, fixed_itinerary: isFixedItinerary };
+    if (codes.length === 1)
+      return { destination: codes[0], fixed_itinerary: isFixedItinerary };
+    return { fixed_itinerary: isFixedItinerary };
   }
 
   /**

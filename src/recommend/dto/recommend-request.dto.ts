@@ -4,6 +4,7 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  IsBoolean,
   ValidateNested,
 } from 'class-validator';
 import { IsNumberRecord } from '../../common/validators/is-number-record.decorator';
@@ -37,6 +38,10 @@ export class RecommendRequestDto {
   @IsObject()
   @IsNumberRecord()
   stayDurations?: Record<string, number>;
+
+  @IsOptional()
+  @IsBoolean()
+  fixed_itinerary?: boolean;
 
   @IsOptional()
   @ValidateNested({ each: true })

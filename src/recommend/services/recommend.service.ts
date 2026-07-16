@@ -56,6 +56,7 @@ export class RecommendService {
         destination: data.destination,
         cities: data.cities,
         stayDurations: data.stayDurations,
+        fixed_itinerary: data.fixed_itinerary,
       },
     );
 
@@ -71,6 +72,7 @@ export class RecommendService {
           perturbations,
           destination: resolved.destination,
           stayDurations: resolved.stayDurations,
+          fixed_itinerary: resolved.fixed_itinerary,
           warnings,
         });
 

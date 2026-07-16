@@ -32,6 +32,7 @@ export interface ParsedRoute {
   destination: string | null;
   cities: string[] | null;
   stayDurations: Record<string, number> | null;
+  fixed_itinerary?: boolean;
 }
 
 /** Raw shape returned by the LLM JSON blob (all fields optional / unknown) */
@@ -40,6 +41,7 @@ interface LLMRouteRaw {
   destination?: string | null;
   cities?: unknown[] | null;
   stayDurations?: Record<string, unknown> | null;
+  fixed_itinerary?: unknown;
 }
 
 interface LLMPreferenceEvidenceRaw {
@@ -133,9 +135,10 @@ Rules:
 - SINGLE LEG (one-way, no return): set "cities" to null, set "origin" (default to {homeAirport} if not stated) and "destination".
 - Only use airport codes from the known list. If a city has multiple airports, pick the primary one. If unsure, use null.
 - Extract per-city stay durations if mentioned (e.g. "3 nights in Rome" → stayDurations: {{"FCO": 3}}). The final home leg always has 0 nights.
+- fixed_itinerary: set to true if the request implies a specific ordered sequence of flights, locking the cities to the given order (e.g. "from A to B then to C", "A -> B -> C", "first visit A and then B", or mention of specific dates/schedules/order). Set to false if it's just a general list of places to visit without a strict order (e.g. "visit London and Paris").
 
 Respond with ONLY this JSON, no explanation:
-{{"origin": "XXX" | null, "destination": "XXX" | null, "cities": ["XXX", "YYY"] | null, "stayDurations": {{"XXX": 2}} | null}}
+{{"origin": "XXX" | null, "destination": "XXX" | null, "cities": ["XXX", "YYY"] | null, "stayDurations": {{"XXX": 2}} | null, "fixed_itinerary": true | false}}
 `);
 
 const PREFS_PROMPT = ChatPromptTemplate.fromTemplate(`
@@ -396,6 +399,10 @@ export class CortexService {
         destination,
         cities,
         stayDurations,
+        fixed_itinerary:
+          typeof raw.fixed_itinerary === 'boolean'
+            ? raw.fixed_itinerary
+            : false,
       };
       routeCache.set(cacheKey, result);
       return result;

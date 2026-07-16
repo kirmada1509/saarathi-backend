@@ -8,6 +8,7 @@ export class ParseRouteResponseDto implements ParsedRouteFromRequest {
   stayDurations!: Record<string, number>;
   placeNames!: Record<string, string>;
   returnCity?: string;
+  fixed_itinerary?: boolean;
   warnings?: string[];
 
   static from(

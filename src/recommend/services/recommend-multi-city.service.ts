@@ -18,6 +18,7 @@ export interface RecommendMultiCityParams {
   perturbations: Perturbation[];
   destination?: string;
   stayDurations?: Record<string, number>;
+  fixed_itinerary?: boolean;
   warnings?: string[];
 }
 
@@ -39,6 +40,7 @@ export class RecommendMultiCityService {
       perturbations,
       destination,
       stayDurations,
+      fixed_itinerary,
       warnings,
     } = params;
     const mcResult = this.multiCityService.optimizeRoute(
@@ -46,6 +48,8 @@ export class RecommendMultiCityService {
       perturbedPref,
       destination,
       stayDurations,
+      requestText,
+      fixed_itinerary,
     );
 
     if (!mcResult) {
