@@ -80,6 +80,7 @@ export class RecommendSingleLegService {
       const bindingStep = this.rankingService.findBindingConstraint(
         filterTrace.steps,
       );
+
       const staticFallback =
         `No flights matched your hard constraints (layovers, dates, redeyes). ` +
         (bindingStep
@@ -88,17 +89,22 @@ export class RecommendSingleLegService {
         `Review the decision boundaries below to see what changes would produce recommendations.`;
 
       alternatives = this.rankingService.selectAlternatives([], user);
+
       counterfactuals = this.counterfactualsService.computeCounterfactuals(
         [],
         perturbedPref,
         routeFlights,
         opts,
       );
+
       confidence = this.confidenceService.computeConfidence([], perturbedPref);
+
       explanation = staticFallback;
     } else {
       verdict = ranked[0];
+
       alternatives = this.rankingService.selectAlternatives(ranked, user);
+
       // Compute counterfactuals against the original unperturbed base preferences
       counterfactuals = this.counterfactualsService.computeCounterfactuals(
         ranked,
@@ -106,6 +112,7 @@ export class RecommendSingleLegService {
         routeFlights,
         opts,
       );
+
       confidence = this.confidenceService.computeConfidence(
         ranked,
         perturbedPref,

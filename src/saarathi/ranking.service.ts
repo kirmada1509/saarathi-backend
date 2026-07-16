@@ -6,7 +6,8 @@ import {
   ScoredFlight,
   FilterTrace,
   Alternative,
-  Perturbation,
+  FilterAndRankOptions,
+  FilterTraceStep,
 } from './types';
 
 function normalize(values: number[]): number[] {
@@ -54,13 +55,7 @@ export class RankingService {
   filterAndRank(
     flights: FlightRow[],
     pref: InferredPreference,
-    opts: {
-      origin?: string;
-      destination?: string;
-      date?: string;
-      perturbations?: Perturbation[];
-      preferredDays?: string[];
-    } = {},
+    opts: FilterAndRankOptions = {},
   ): { ranked: ScoredFlight[]; trace: FilterTrace } {
     const origin = opts.origin ?? pref.home_airport;
     const trace: FilterTrace = { steps: [] };
@@ -427,12 +422,7 @@ export class RankingService {
   runSingleLegRoutingWithFallback(
     routeFlights: FlightRow[],
     perturbedPref: InferredPreference,
-    opts: {
-      origin: string;
-      destination: string;
-      perturbations: Perturbation[];
-      preferredDays: string[];
-    },
+    opts: FilterAndRankOptions,
   ): {
     ranked: ScoredFlight[];
     filterTrace: FilterTrace;
@@ -455,72 +445,53 @@ export class RankingService {
 
     if (bindingStep) {
       const { origin, destination, perturbations, preferredDays } = opts;
+      const relaxedOpts = { origin, destination, perturbations, preferredDays };
 
       // Try relaxing max_layover_minutes by 1.5x if the binding constraint mentions layover
       if (bindingStep.constraint.toLowerCase().includes('layover')) {
         const originalLayover = perturbedPref.max_layover_minutes;
         const relaxedLayover = Math.round(originalLayover * 1.5);
-        const relaxedPref: InferredPreference = {
-          ...perturbedPref,
-          max_layover_minutes: relaxedLayover,
-        };
-        const relaxedOpts = {
-          origin,
-          destination,
-          perturbations,
-          preferredDays,
-        };
-        const { ranked: relaxedRanked } = this.filterAndRank(
+
+        const relaxation1 = this.tryRelaxation(
           routeFlights,
-          relaxedPref,
+          perturbedPref,
           relaxedOpts,
+          { max_layover_minutes: relaxedLayover },
+          ` [Relaxed: layover <= ${relaxedLayover}m]`,
         );
 
-        if (relaxedRanked.length > 0) {
-          relaxedVerdict = relaxedRanked[0];
-          relaxedNote = ` [Relaxed: layover <= ${relaxedLayover}m]`;
-        } else {
+        if (relaxation1.verdict) {
+          relaxedVerdict = relaxation1.verdict;
+          relaxedNote = relaxation1.note;
+        } else if (perturbedPref.avoid_redeye) {
           // Still zero — try also disabling redeye avoidance
-          if (perturbedPref.avoid_redeye) {
-            const relaxedPref2: InferredPreference = {
-              ...relaxedPref,
-              avoid_redeye: false,
-            };
-            const { ranked: relaxedRanked2 } = this.filterAndRank(
-              routeFlights,
-              relaxedPref2,
-              relaxedOpts,
-            );
-            if (relaxedRanked2.length > 0) {
-              relaxedVerdict = relaxedRanked2[0];
-              relaxedNote = ` [Relaxed: layover <= ${relaxedLayover}m + redeye ok]`;
-            }
+          const relaxation2 = this.tryRelaxation(
+            routeFlights,
+            perturbedPref,
+            relaxedOpts,
+            { max_layover_minutes: relaxedLayover, avoid_redeye: false },
+            ` [Relaxed: layover <= ${relaxedLayover}m + redeye ok]`,
+          );
+          if (relaxation2.verdict) {
+            relaxedVerdict = relaxation2.verdict;
+            relaxedNote = relaxation2.note;
           }
         }
       } else if (
-        bindingStep.constraint.toLowerCase().includes('redeye') &&
-        perturbedPref.avoid_redeye
+        perturbedPref.avoid_redeye &&
+        bindingStep.constraint.toLowerCase().includes('redeye')
       ) {
         // Binding constraint is redeye — try disabling it
-        const relaxedPref: InferredPreference = {
-          ...perturbedPref,
-          avoid_redeye: false,
-        };
-        const relaxedOpts = {
-          origin,
-          destination,
-          perturbations,
-          preferredDays,
-        };
-        const { ranked: relaxedRanked } = this.filterAndRank(
+        const relaxation = this.tryRelaxation(
           routeFlights,
-          relaxedPref,
+          perturbedPref,
           relaxedOpts,
+          { avoid_redeye: false },
+          ' [Relaxed: redeye ok]',
         );
-
-        if (relaxedRanked.length > 0) {
-          relaxedVerdict = relaxedRanked[0];
-          relaxedNote = ' [Relaxed: redeye ok]';
+        if (relaxation.verdict) {
+          relaxedVerdict = relaxation.verdict;
+          relaxedNote = relaxation.note;
         }
       }
     }
@@ -532,13 +503,26 @@ export class RankingService {
     };
   }
 
-  findBindingConstraint(
-    steps: { constraint: string; removed: number; remaining: number }[],
-  ): { constraint: string; removed: number; remaining: number } | null {
+  findBindingConstraint(steps: FilterTraceStep[]): FilterTraceStep | null {
     if (steps.length === 0) return null;
     return steps.reduce(
       (max, step) => (step.removed > max.removed ? step : max),
       steps[0],
     );
+  }
+
+  private tryRelaxation(
+    routeFlights: FlightRow[],
+    pref: InferredPreference,
+    opts: FilterAndRankOptions,
+    relaxedPrefModifier: Partial<InferredPreference>,
+    note: string,
+  ): { verdict: ScoredFlight | null; note: string } {
+    const relaxedPref = { ...pref, ...relaxedPrefModifier };
+    const { ranked } = this.filterAndRank(routeFlights, relaxedPref, opts);
+    if (ranked.length > 0) {
+      return { verdict: ranked[0], note };
+    }
+    return { verdict: null, note: '' };
   }
 }

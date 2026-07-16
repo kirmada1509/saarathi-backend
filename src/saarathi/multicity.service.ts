@@ -6,6 +6,7 @@ import {
   MultiCityItinerary,
   MultiCityLeg,
   Alternative,
+  Itinerary,
 } from './types';
 import { SaarathiDataService } from './data.service';
 import { RankingService } from './ranking.service';
@@ -52,6 +53,7 @@ export class MultiCityService {
   optimizeRoute(
     cities: string[],
     pref: InferredPreference,
+    destination?: string,
     stayDurations?: Record<string, number>,
   ): {
     itinerary: MultiCityItinerary;
@@ -63,14 +65,10 @@ export class MultiCityService {
     const home = pref.home_airport;
 
     const permutations = permute(cities);
-    const validItineraries: {
-      itinerary: MultiCityItinerary;
-      scoreSum: number;
-      legs: MultiCityLeg[];
-    }[] = [];
+    const validItineraries: Itinerary[] = [];
 
     for (const perm of permutations) {
-      const route = [home, ...perm, home];
+      const route = [home, ...perm, destination ?? home];
 
       // Precompute ranked flights and top scores for each leg in this route
       const rankedLegs: ScoredFlight[][] = [];

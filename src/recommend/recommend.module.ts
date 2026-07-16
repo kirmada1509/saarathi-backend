@@ -5,9 +5,10 @@ import { RecommendSingleLegService } from './services/recommend-single-leg.servi
 import { RecommendMultiCityService } from './services/recommend-multi-city.service';
 import { InferenceModule } from '../inference/inference.module';
 import { SaarathiModule } from '../saarathi/saarathi.module';
+import { CortexModule } from '../cortex/cortex.module';
 
 @Module({
-  imports: [InferenceModule, SaarathiModule],
+  imports: [InferenceModule, SaarathiModule, CortexModule],
   controllers: [RecommendController],
   providers: [
     RecommendService,

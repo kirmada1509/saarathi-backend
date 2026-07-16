@@ -53,8 +53,22 @@ export interface EvidenceItem {
   dimension: 'direct' | 'cost' | 'convenience' | 'redeye' | 'airline' | 'cabin';
 }
 
+export interface FilterTraceStep {
+  constraint: string;
+  removed: number;
+  remaining: number;
+}
+
 export interface FilterTrace {
-  steps: { constraint: string; removed: number; remaining: number }[];
+  steps: FilterTraceStep[];
+}
+
+export interface FilterAndRankOptions {
+  origin?: string;
+  destination?: string;
+  date?: string;
+  perturbations?: Perturbation[];
+  preferredDays?: string[];
 }
 
 export interface InferredPreference {
@@ -159,4 +173,10 @@ export interface RecommendResponse {
   itinerary?: MultiCityItinerary;
   appliedPerturbations: Perturbation[];
   warnings?: string[];
+}
+
+export interface Itinerary {
+  itinerary: MultiCityItinerary;
+  scoreSum: number;
+  legs: MultiCityLeg[];
 }

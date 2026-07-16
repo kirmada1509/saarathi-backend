@@ -69,6 +69,7 @@ export class RecommendService {
           cities: resolvedCities,
           perturbedPref,
           perturbations,
+          destination: resolved.destination,
           stayDurations: resolved.stayDurations,
           warnings,
         });

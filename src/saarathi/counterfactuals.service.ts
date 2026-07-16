@@ -5,6 +5,7 @@ import {
   FlightRow,
   Counterfactual,
   Perturbation,
+  FilterAndRankOptions,
 } from './types';
 import { SaarathiDataService } from './data.service';
 import { RankingService } from './ranking.service';
@@ -54,7 +55,7 @@ export class CounterfactualsService {
     ranked: ScoredFlight[],
     pref: InferredPreference,
     candidates: FlightRow[],
-    opts: { origin?: string; destination?: string; date?: string } = {},
+    opts: FilterAndRankOptions = {},
   ): Counterfactual[] {
     const champion = ranked.length > 0 ? ranked[0] : null;
     const counterfactuals: Counterfactual[] = [];
